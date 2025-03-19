@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <h1>🌾 Chatbot AI Pertanian</h1>
-        
+
         <!-- Tombol Cek Cuaca di atas -->
         <button onclick="getWeather()" class="weather-btn">🌦️ Cek Cuaca</button>
 
@@ -18,17 +18,34 @@
         <div class="input-container">
             <input type="text" id="userInput" placeholder="Tanyakan sesuatu..." onkeypress="handleKeyPress(event)">
             <button onclick="sendMessage()">Kirim</button>
+            <button id="clear-chat">Hapus Riwayat</button>
         </div>
     </div>
 
     <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            loadChatHistory();
+        });
+
         function appendMessage(sender, message, isUser) {
             let chatbox = document.getElementById("chatbox");
             let messageDiv = document.createElement("div");
             messageDiv.classList.add("message", isUser ? "user" : "bot");
-            messageDiv.innerHTML = `<b>${sender}:</b> ${message}`;
+
+            let avatar = document.createElement("img");
+            avatar.src = isUser ? "user-avatar.webp" : "bot-avatar.webp";
+            avatar.classList.add("avatar");
+
+            let textDiv = document.createElement("div");
+            textDiv.classList.add("text");
+            textDiv.innerHTML = `<b>${sender}:</b> ${message}`;
+
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(textDiv);
             chatbox.appendChild(messageDiv);
             chatbox.scrollTop = chatbox.scrollHeight;
+
+            saveChatHistory();
         }
 
         async function sendMessage() {
@@ -38,6 +55,8 @@
             appendMessage("Anda", userMessage, true);
             document.getElementById("userInput").value = "";
 
+            let loadingMessage = appendLoadingMessage();
+
             try {
                 let response = await fetch("http://127.0.0.1:5000/chat", {
                     method: "POST",
@@ -46,10 +65,32 @@
                 });
 
                 let result = await response.json();
+                loadingMessage.remove();
                 appendMessage("Bot", result.response, false);
             } catch (error) {
+                loadingMessage.remove();
                 appendMessage("Bot", "⚠️ Terjadi kesalahan.", false);
             }
+        }
+
+        function appendLoadingMessage() {
+            let chatbox = document.getElementById("chatbox");
+            let loadingDiv = document.createElement("div");
+            loadingDiv.classList.add("message", "bot");
+            
+            let avatar = document.createElement("img");
+            avatar.src = "bot-avatar.webp";
+            avatar.classList.add("avatar");
+
+            let loadingText = document.createElement("div");
+            loadingText.classList.add("loading-dots");
+            loadingText.innerHTML = "<span>.</span><span>.</span><span>.</span>";
+
+            loadingDiv.appendChild(avatar);
+            loadingDiv.appendChild(loadingText);
+            chatbox.appendChild(loadingDiv);
+            chatbox.scrollTop = chatbox.scrollHeight;
+            return loadingDiv;
         }
 
         async function getWeather() {
@@ -75,6 +116,25 @@
                 sendMessage();
             }
         }
+
+        function saveChatHistory() {
+            let chatbox = document.getElementById("chatbox").innerHTML;
+            localStorage.setItem("chatHistory", chatbox);
+        }
+
+        function loadChatHistory() {
+            let savedChat = localStorage.getItem("chatHistory");
+            if (savedChat) {
+                document.getElementById("chatbox").innerHTML = savedChat;
+            }
+        }
+
+        document.getElementById("clear-chat").addEventListener("click", function () {
+            document.getElementById("chatbox").innerHTML = "";
+            localStorage.removeItem("chatHistory");
+        });
     </script>
+
+
 </body>
 </html>

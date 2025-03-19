@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+
+
 # Load API Key dari file .env (jika ada)
 load_dotenv()
 
@@ -203,6 +205,23 @@ def fertilizer_plan():
 
     return jsonify({"response": response_text})
 
+def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
+    rekomendasi = []
+
+    if musim == "hujan":
+        rekomendasi.extend(["Padi", "Jagung", "Kacang Tanah"])
+    if musim == "kemarau":
+        rekomendasi.extend(["Jagung", "Kedelai", "Ubi Kayu"])
+    if suhu and suhu < 20:
+        rekomendasi.extend(["Kentang", "Wortel", "Kubis"])
+    if curah_hujan and curah_hujan > 200:  # Curah hujan tinggi dalam mm
+        rekomendasi = [t for t in rekomendasi if t not in ["Cabai", "Bawang Merah"]]
+
+    return rekomendasi if rekomendasi else ["Tidak ada rekomendasi spesifik"]
+
+# Contoh penggunaan:
+print(rekomendasi_tanaman(musim="kemarau", suhu=25, curah_hujan=100))
+# Output: ['Jagung', 'Kedelai', 'Ubi Kayu']
 
 
 @app.route("/chat", methods=["POST"])
@@ -248,10 +267,10 @@ def chat():
         if response.status_code == 200 and "choices" in response_json:
             bot_response = response_json["choices"][0].get("message", {}).get("content", "").strip()
         else:
-            bot_response = "⚠️ Maaf, terjadi kesalahan."
+            bot_response = "⚠️ Tidak bisa mengambil data cuaca. Periksa koneksi atau coba lokasi lain."
 
     except Exception as e:
-        bot_response = f"⚠️ Maaf, terjadi kesalahan: {str(e)}"
+        bot_response = f"⚠️ Tidak bisa mengambil data cuaca. Periksa koneksi atau coba lokasi lain: {str(e)}"
 
     return jsonify({"response": bot_response})
 
@@ -292,7 +311,7 @@ def get_weather():
             weather_report = "⚠️ Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
 
     except Exception as e:
-        weather_report = f"⚠️ Maaf, terjadi kesalahan: {str(e)}"
+        weather_report = f"⚠️ Maaf, layanan Together AI sedang sibuk. Coba lagi nanti: {str(e)}"
 
     return jsonify({"response": weather_report})
 

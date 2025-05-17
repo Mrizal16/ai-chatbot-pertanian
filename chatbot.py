@@ -4,9 +4,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-
-
-# Load API Key dari file .env (jika ada)
 load_dotenv()
 
 # API Keys
@@ -28,7 +25,11 @@ def home():
         "message": "✅ Selamat datang di Chatbot AI Pertanian (Powered by Together AI)!",
         "endpoints": {
             "/chat": "Gunakan metode POST untuk bertanya ke chatbot.",
-            "/weather": "Gunakan metode POST untuk mendapatkan informasi cuaca."
+            "/weather": "Gunakan metode POST untuk mendapatkan informasi cuaca.",
+            "/fertilizer": "Hitung kebutuhan pupuk berdasarkan luas lahan.",
+            "/fertilizer_v2": "Hitung pupuk berdasarkan luas, jenis tanaman, dan target panen.",
+            "/fertilizer_plan": "Perencanaan pupuk berdasarkan target panen.",
+            "/recommend_crop": "Rekomendasi tanaman berdasarkan musim, suhu, dan curah hujan."
         }
     })
 
@@ -36,58 +37,58 @@ def home():
 SISTEM_PAKAR = {
     # 1️⃣ Penyakit dan Hama Tanaman
     "tanaman padi saya terkena bercak coklat, apa penyebabnya?": 
-        "🔬 Penyebab bercak coklat pada padi adalah jamur *Cochliobolus miyabeanus*. Penyakit ini bisa muncul karena kelembaban tinggi dan kekurangan kalium.",
+        "Penyebab bercak coklat pada padi adalah jamur *Cochliobolus miyabeanus*. Penyakit ini bisa muncul karena kelembaban tinggi dan kekurangan kalium.",
     "bagaimana cara mengatasi wereng pada padi?": 
-        "🛡️ Untuk mengatasi wereng, gunakan varietas tahan wereng, semprot insektisida berbahan aktif imidakloprid, dan jaga kebersihan lahan.",
+        "Untuk mengatasi wereng, gunakan varietas tahan wereng, semprot insektisida berbahan aktif imidakloprid, dan jaga kebersihan lahan.",
     "apa gejala penyakit hawar daun bakteri (hdb)?": 
-        "⚠️ Gejala HDB adalah daun menguning, ujung mengering, dan muncul garis coklat. Penyakit ini disebabkan oleh bakteri *Xanthomonas oryzae*.",
+        "Gejala HDB adalah daun menguning, ujung mengering, dan muncul garis coklat. Penyakit ini disebabkan oleh bakteri *Xanthomonas oryzae*.",
     "pestisida apa yang cocok untuk ulat grayak?": 
-        "🐛 Pestisida yang efektif untuk ulat grayak adalah yang mengandung bahan aktif klorfenapir atau metomil.",
+        "Pestisida yang efektif untuk ulat grayak adalah yang mengandung bahan aktif klorfenapir atau metomil.",
     "kapan waktu terbaik menanam padi?": 
-        "📅 Waktu terbaik menanam padi adalah Oktober-Desember (musim hujan) dan Maret-Mei (musim kemarau dengan irigasi).",
+        "Waktu terbaik menanam padi adalah Oktober-Desember (musim hujan) dan Maret-Mei (musim kemarau dengan irigasi).",
     "kapan menanam jagung agar hasil optimal?": 
-        "🌽 Jagung sebaiknya ditanam pada awal musim hujan (Oktober) atau akhir musim kemarau (Juli) untuk hasil maksimal.",
+        "Jagung sebaiknya ditanam pada awal musim hujan (Oktober) atau akhir musim kemarau (Juli) untuk hasil maksimal.",
 
 
     # 2️⃣ Pemupukan & Nutrisi Tanaman
     "kapan waktu terbaik untuk memupuk padi?": 
-        "🌱 Pemupukan padi sebaiknya dilakukan 3 tahap: (1) Pupuk dasar saat tanam, (2) Pupuk susulan saat umur 21 HST, (3) Pupuk tambahan saat 45 HST.",
+        "Pemupukan padi sebaiknya dilakukan 3 tahap: (1) Pupuk dasar saat tanam, (2) Pupuk susulan saat umur 21 HST, (3) Pupuk tambahan saat 45 HST.",
     "berapa dosis pupuk urea untuk padi per hektar?": 
-        "📌 Dosis pupuk urea untuk padi sawah adalah 200-250 kg/ha, diberikan dalam 2 tahap: 100 kg saat umur 7-10 HST dan sisanya saat 30-35 HST.",
+        "Dosis pupuk urea untuk padi sawah adalah 200-250 kg/ha, diberikan dalam 2 tahap: 100 kg saat umur 7-10 HST dan sisanya saat 30-35 HST.",
     "pupuk apa yang mengandung nitrogen tinggi?": 
-        "🧪 Pupuk dengan nitrogen tinggi antara lain Urea (N=46%), ZA (N=21%), dan pupuk organik dari kotoran ayam.",
+        "Pupuk dengan nitrogen tinggi antara lain Urea (N=46%), ZA (N=21%), dan pupuk organik dari kotoran ayam.",
     "bagaimana cara mengetahui tanaman kekurangan kalium?": 
-        "🔎 Gejala kekurangan kalium: Daun menguning dari tepi, pertumbuhan terhambat, dan batang lemah.",
+        "Gejala kekurangan kalium: Daun menguning dari tepi, pertumbuhan terhambat, dan batang lemah.",
 
     # 3️⃣ Pengairan dan Irigasi
     "berapa tinggi air yang ideal untuk sawah padi?": 
-        "💧 Tinggi air ideal untuk sawah padi adalah 2-5 cm saat pertumbuhan awal dan 5-10 cm saat pertumbuhan aktif.",
+        "Tinggi air ideal untuk sawah padi adalah 2-5 cm saat pertumbuhan awal dan 5-10 cm saat pertumbuhan aktif.",
     "kapan waktu yang tepat untuk mengeringkan sawah?": 
-        "🌞 Sawah perlu dikeringkan 10-14 hari sebelum panen agar kualitas gabah lebih baik dan mengurangi kadar air.",
+        "Sawah perlu dikeringkan 10-14 hari sebelum panen agar kualitas gabah lebih baik dan mengurangi kadar air.",
     "bagaimana cara irigasi yang hemat air untuk padi?": 
-        "🚰 Gunakan sistem irigasi berselang atau AWD (Alternate Wetting and Drying) untuk menghemat air hingga 30%.",
+        "Gunakan sistem irigasi berselang atau AWD (Alternate Wetting and Drying) untuk menghemat air hingga 30%.",
     "apa dampak kelebihan air pada tanaman?": 
-        "⚠️ Kelebihan air menyebabkan akar busuk, pertumbuhan terhambat, dan meningkatkan risiko penyakit jamur.",
+        "Kelebihan air menyebabkan akar busuk, pertumbuhan terhambat, dan meningkatkan risiko penyakit jamur.",
 
     # 4️⃣ Pola Tanam & Rotasi Tanaman
     "tanaman apa yang cocok ditanam setelah panen padi?": 
-        "🌾 Setelah padi, cocok ditanam kacang hijau atau kedelai untuk meningkatkan kesuburan tanah.",
+        "Setelah padi, cocok ditanam kacang hijau atau kedelai untuk meningkatkan kesuburan tanah.",
     "bagaimana cara mengurangi hama dengan tumpangsari?": 
-        "🐞 Tumpangsari dengan tanaman pengusir hama seperti jagung dan kacang tanah bisa mengurangi serangan hama.",
+        "Tumpangsari dengan tanaman pengusir hama seperti jagung dan kacang tanah bisa mengurangi serangan hama.",
     "apakah jagung cocok ditanam setelah padi?": 
-        "🌽 Ya, jagung cocok ditanam setelah padi karena membutuhkan nitrogen lebih sedikit dibanding padi.",
+        "Ya, jagung cocok ditanam setelah padi karena membutuhkan nitrogen lebih sedikit dibanding padi.",
     "apa keuntungan rotasi tanaman?": 
-        "🔄 Rotasi tanaman mengurangi hama, meningkatkan kesuburan tanah, dan mengurangi ketergantungan pada pupuk kimia.",
+        "Rotasi tanaman mengurangi hama, meningkatkan kesuburan tanah, dan mengurangi ketergantungan pada pupuk kimia.",
 
     # 5️⃣ Cuaca dan Dampaknya pada Pertanian
     "apa dampak hujan berlebih pada padi?": 
-        "🌧️ Hujan berlebih dapat menyebabkan busuk akar, penyakit jamur, dan menghambat penyerbukan.",
+        "Hujan berlebih dapat menyebabkan busuk akar, penyakit jamur, dan menghambat penyerbukan.",
     "bagaimana cara melindungi tanaman dari cuaca panas?": 
-        "☀️ Gunakan mulsa jerami, penyiraman pagi/sore, dan naungan untuk mengurangi dampak cuaca panas.",
+        "Gunakan mulsa jerami, penyiraman pagi/sore, dan naungan untuk mengurangi dampak cuaca panas.",
     "kapan waktu tanam terbaik berdasarkan musim?": 
-        "📅 Waktu tanam terbaik di musim hujan: Oktober-Desember, di musim kemarau: Maret-Mei.",
+        "Waktu tanam terbaik di musim hujan: Oktober-Desember, di musim kemarau: Maret-Mei.",
     "bagaimana cara mengatasi embun beku di tanaman?": 
-        "❄️ Gunakan kabut buatan atau penyiraman malam untuk mengurangi efek embun beku."
+        "Gunakan kabut buatan atau penyiraman malam untuk mengurangi efek embun beku."
 
     
 }
@@ -188,7 +189,7 @@ def fertilizer_plan():
         f"📊 *Estimasi kebutuhan pupuk untuk {area} ha padi dengan target {target_yield} ton/ha:*\n"
     )
     response_text += "\n".join(
-        [f"🔹 {pupuk.upper()}: {data['min']}-{data['max']} kg" for pupuk, data in kebutuhan_pupuk.items()]
+        [f"🔹 {pupuk.upper()}: {value['min']}-{value['max']} kg" for pupuk, value in kebutuhan_pupuk.items()]
     )
 
     response_text += (
@@ -223,25 +224,65 @@ def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
 print(rekomendasi_tanaman(musim="kemarau", suhu=25, curah_hujan=100))
 # Output: ['Jagung', 'Kedelai', 'Ubi Kayu']
 
+@app.route("/recommend_crop", methods=["POST"])
+def recommend_crop():
+    """Memberikan rekomendasi tanaman berdasarkan musim, suhu, dan curah hujan"""
+    data = request.get_json()
+    musim = data.get("musim", "").strip().lower()
+    suhu = float(data.get("suhu", 0))
+    curah_hujan = float(data.get("curah_hujan", 0))
+
+    if not musim or suhu <= 0 or curah_hujan <= 0:
+        return jsonify({"response": "⚠️ Masukkan data musim, suhu, dan curah hujan yang valid."})
+
+    rekomendasi = rekomendasi_tanaman(musim=musim, suhu=suhu, curah_hujan=curah_hujan)
+    return jsonify({
+        "response": f"🌱 Rekomendasi tanaman untuk kondisi tersebut: {', '.join(rekomendasi)}"
+    })
+
+
+last_response = ""  # Simpan jawaban terakhir untuk bisa diringkas
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    """Chatbot AI untuk pertanian & cuaca"""
+    global last_response
     data = request.get_json()
     user_message = data.get("message", "").strip().lower()
 
     if not user_message:
         return jsonify({"response": "⚠️ Mohon ketik sesuatu untuk bertanya."})
 
-    # ✅ **Cek apakah ada jawaban di sistem pakar**
-    if user_message in SISTEM_PAKAR:
-        return jsonify({"response": SISTEM_PAKAR[user_message]})
+    # ✅ Jika pengguna ingin merangkum jawaban sebelumnya
+    if "ringkas jawabannya" in user_message or "persingkat jawabannya" in user_message:
+        if last_response:
+            summarized_response = summarize_answer(last_response)
+            return jsonify({"response": summarized_response})
+        else:
+            return jsonify({"response": "⚠️ Tidak ada jawaban sebelumnya untuk diringkas."})
 
-    # ✅ **Cek apakah pertanyaan relevan dengan pertanian/cuaca**
+    # ✅ Cek apakah pertanyaan ada di sistem pakar
+    if user_message in SISTEM_PAKAR:
+        last_response = SISTEM_PAKAR[user_message]
+        return jsonify({"response": last_response})
+
+    # ✅ Cek apakah pertanyaan relevan dengan pertanian/cuaca
     if not is_relevant_question(user_message):
         return jsonify({"response": "⚠️ Maaf, saya hanya menjawab pertanyaan tentang pertanian dan cuaca."})
 
-    # Kirim ke Together AI
+    # 🔁 Jawaban dari Together AI
+    response = get_answer_from_ai(user_message)
+    last_response = response
+    return jsonify({"response": response})
+
+
+def summarize_answer(answer):
+    """Fungsi untuk meringkas jawaban panjang menjadi versi pendek."""
+    lines = answer.split('\n')
+    return '\n'.join(lines[:3]) + "..." if len(lines) > 3 else answer
+
+
+def get_answer_from_ai(user_message):
+    """Fungsi untuk mendapatkan jawaban dari Together AI."""
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
@@ -250,10 +291,7 @@ def chat():
     payload = {
         "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
         "messages": [
-            {"role": "system", "content": 
-                "Anda adalah chatbot AI pertanian. Jawablah hanya tentang pertanian dan cuaca. "
-                "Jika pertanyaan tidak terkait, jawab: '⚠️ Maaf, saya hanya menjawab pertanian dan cuaca.'"
-            },
+            {"role": "system", "content": "Anda adalah chatbot AI yang ahli di bidang pertanian dan cuaca. Jawablah dengan penjelasan singkat dan mudah dipahami."},
             {"role": "user", "content": user_message}
         ],
         "max_tokens": 1000,
@@ -265,14 +303,13 @@ def chat():
         response_json = response.json()
 
         if response.status_code == 200 and "choices" in response_json:
-            bot_response = response_json["choices"][0].get("message", {}).get("content", "").strip()
+            return response_json["choices"][0].get("message", {}).get("content", "").strip()
         else:
-            bot_response = "⚠️ Tidak bisa mengambil data cuaca. Periksa koneksi atau coba lokasi lain."
-
+            return "⚠️ Tidak bisa mengambil jawaban dari AI. Periksa koneksi atau coba lagi nanti."
     except Exception as e:
-        bot_response = f"⚠️ Tidak bisa mengambil data cuaca. Periksa koneksi atau coba lokasi lain: {str(e)}"
+        return f"⚠️ Terjadi kesalahan saat menghubungi AI: {str(e)}"
 
-    return jsonify({"response": bot_response})
+
 
 @app.route("/weather", methods=["POST"])
 def get_weather():
@@ -307,6 +344,7 @@ def get_weather():
                 f"🌬️ *Kecepatan Angin:* {wind_speed} m/s\n"
                 f"\n🔹 *Semoga informasi ini bermanfaat!* 😊"
             )
+            """ return jsonify({"response": weather_report}) """
         else:
             weather_report = "⚠️ Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
 

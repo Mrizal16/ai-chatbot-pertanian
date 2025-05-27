@@ -3,7 +3,7 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-import difflib
+import spacy
 
 load_dotenv()
 
@@ -12,18 +12,27 @@ TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 if not TOGETHER_API_KEY:
-    raise ValueError("⚠️ API Key Together AI tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
+    raise ValueError("API Key Together AI tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
 if not OPENWEATHER_API_KEY:
-    raise ValueError("⚠️ API Key OpenWeather tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
+    raise ValueError("API Key OpenWeather tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
 
 # Inisialisasi Flask
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Inisialisasi model NLP
+# Pastikan model ini sudah diunduh dengan: python -m spacy download xx_ent_wiki_sm
+try:
+    nlp = spacy.load("xx_ent_wiki_sm")
+except OSError:
+    print("Model 'xx_ent_wiki_sm' tidak ditemukan. Harap unduh dengan: python -m spacy download xx_ent_wiki_sm")
+    # Alternatif: gunakan model yang lebih kecil atau berikan pesan error yang jelas
+    nlp = None # Atau keluar dari aplikasi jika spaCy sangat krusial
 
 @app.route("/")
 def home():
     return jsonify({
-        "message": "✅ Selamat datang di Chatbot AI Pertanian (Powered by Together AI)!",
+        "message": "Selamat datang di Chatbot AI Pertanian (Powered by Together AI)!",
         "endpoints": {
             "/chat": "Gunakan metode POST untuk bertanya ke chatbot.",
             "/weather": "Gunakan metode POST untuk mendapatkan informasi cuaca.",
@@ -31,25 +40,26 @@ def home():
         }
     })
 
-# === ✅ SISTEM PAKAR: Aturan IF-THEN ===
+
+# === SISTEM PAKAR: Aturan IF-THEN ===
 SISTEM_PAKAR = {
-    # 1️⃣ Penyakit dan Hama Tanaman
-    "tanaman padi saya terkena bercak coklat, apa penyebabnya?": 
-        "Penyebab bercak coklat pada padi adalah jamur *Cochliobolus miyabeanus*. Penyakit ini bisa muncul karena kelembaban tinggi dan kekurangan kalium.",
-    "bagaimana cara mengatasi wereng pada padi?": 
+    # Penyakit dan Hama Tanaman
+    "tanaman padi saya terkena bercak coklat, apa penyebabnya?":
+        "Penyebab bercak coklat pada padi adalah jamur COCHLIOBOLUS MIYABEANUS. Penyakit ini bisa muncul karena kelembaban tinggi dan kekurangan kalium.",
+    "bagaimana cara mengatasi wereng pada padi?":
         "Untuk mengatasi wereng, gunakan varietas tahan wereng, semprot insektisida berbahan aktif imidakloprid, dan jaga kebersihan lahan.",
-    "apa gejala penyakit hawar daun bakteri (hdb)?": 
-        "Gejala HDB adalah daun menguning, ujung mengering, dan muncul garis coklat. Penyakit ini disebabkan oleh bakteri *Xanthomonas oryzae*.",
-    "pestisida apa yang cocok untuk ulat grayak?": 
+    "apa gejala penyakit hawar daun bakteri (hdb)?":
+        "Gejala HDB adalah daun menguning, ujung mengering, dan muncul garis coklat. Penyakit ini disebabkan oleh bakteri XANTHOMONAS ORYZAE.",
+    "pestisida apa yang cocok untuk ulat grayak?":
         "Pestisida yang efektif untuk ulat grayak adalah yang mengandung bahan aktif klorfenapir atau metomil.",
-    "kapan waktu terbaik menanam padi?": 
+    "kapan waktu terbaik menanam padi?":
         "Waktu terbaik menanam padi adalah Oktober-Desember (musim hujan) dan Maret-Mei (musim kemarau dengan irigasi).",
-    "kapan menanam jagung agar hasil optimal?": 
+    "kapan menanam jagung agar hasil optimal?":
         "Jagung sebaiknya ditanam pada awal musim hujan (Oktober) atau akhir musim kemarau (Juli) untuk hasil maksimal.",
     "bagaimana cara mengatasi blast pada padi?":
         "Gunakan fungisida berbahan aktif triazol dan tanam varietas tahan penyakit seperti IR64 atau Inpari 32.",
     "apa gejala penyakit busuk batang pada jagung?":
-        "Batang berwarna coklat kehitaman, lunak, mudah patah. Disebabkan oleh jamur *Fusarium spp.*.",
+        "Batang berwarna coklat kehitaman, lunak, mudah patah. Disebabkan oleh jamur FUSARIUM SPP.",
     "bagaimana mengendalikan tikus sawah?":
         "Gunakan trap mekanik, musuh alami seperti burung hantu, dan sanitasi lahan secara rutin.",
     "apa penyebab daun jagung menggulung?":
@@ -57,14 +67,14 @@ SISTEM_PAKAR = {
     "mengapa daun padi berubah warna ungu?":
         "Daun ungu bisa jadi karena defisiensi fosfor, terutama pada tanah masam atau miskin hara.",
 
-    # 2️⃣ Pemupukan & Nutrisi Tanaman
-    "kapan waktu terbaik untuk memupuk padi?": 
+    # Pemupukan & Nutrisi Tanaman
+    "kapan waktu terbaik untuk memupuk padi?":
         "Pemupukan padi sebaiknya dilakukan 3 tahap: (1) Pupuk dasar saat tanam, (2) Pupuk susulan saat umur 21 HST, (3) Pupuk tambahan saat 45 HST.",
-    "berapa dosis pupuk urea untuk padi per hektar?": 
+    "berapa dosis pupuk urea untuk padi per hektar?":
         "Dosis pupuk urea untuk padi sawah adalah 200-250 kg/ha, diberikan dalam 2 tahap: 100 kg saat umur 7-10 HST dan sisanya saat 30-35 HST.",
-    "pupuk apa yang mengandung nitrogen tinggi?": 
+    "pupuk apa yang mengandung nitrogen tinggi?":
         "Pupuk dengan nitrogen tinggi antara lain Urea (N=46%), ZA (N=21%), dan pupuk organik dari kotoran ayam.",
-    "bagaimana cara mengetahui tanaman kekurangan kalium?": 
+    "bagaimana cara mengetahui tanaman kekurangan kalium?":
         "Gejala kekurangan kalium: Daun menguning dari tepi, pertumbuhan terhambat, dan batang lemah.",
     "apa pupuk yang cocok untuk jagung saat awal tanam?":
         "Gunakan NPK seimbang (15:15:15) atau kombinasi Urea dan SP36 pada saat tanam.",
@@ -77,14 +87,14 @@ SISTEM_PAKAR = {
     "bagaimana pupuk organik cair diaplikasikan?":
         "Disemprotkan ke daun saat pagi atau sore, biasanya setiap 7–10 hari sekali.",
 
-    # 3️⃣ Pengairan dan Irigasi
-    "berapa tinggi air yang ideal untuk sawah padi?": 
+    # Pengairan dan Irigasi
+    "berapa tinggi air yang ideal untuk sawah padi?":
         "Tinggi air ideal untuk sawah padi adalah 2-5 cm saat pertumbuhan awal dan 5-10 cm saat pertumbuhan aktif.",
-    "kapan waktu yang tepat untuk mengeringkan sawah?": 
+    "kapan waktu yang tepat untuk mengeringkan sawah?":
         "Sawah perlu dikeringkan 10-14 hari sebelum panen agar kualitas gabah lebih baik dan mengurangi kadar air.",
-    "bagaimana cara irigasi yang hemat air untuk padi?": 
+    "bagaimana cara irigasi yang hemat air untuk padi?":
         "Gunakan sistem irigasi berselang atau AWD (Alternate Wetting and Drying) untuk menghemat air hingga 30%.",
-    "apa dampak kelebihan air pada tanaman?": 
+    "apa dampak kelebihan air pada tanaman?":
         "Kelebihan air menyebabkan akar busuk, pertumbuhan terhambat, dan meningkatkan risiko penyakit jamur.",
     "apa itu sistem irigasi tetes?":
         "Irigasi tetes mengalirkan air langsung ke akar tanaman secara perlahan, hemat air dan efisien.",
@@ -97,14 +107,14 @@ SISTEM_PAKAR = {
     "berapa kebutuhan air untuk tanaman jagung per musim?":
         "Sekitar 500–800 mm selama siklus tanam, tergantung varietas dan cuaca.",
 
-    # 4️⃣ Pola Tanam & Rotasi Tanaman
-    "tanaman apa yang cocok ditanam setelah panen padi?": 
+    # Pola Tanam & Rotasi Tanaman
+    "tanaman apa yang cocok ditanam setelah panen padi?":
         "Setelah padi, cocok ditanam kacang hijau atau kedelai untuk meningkatkan kesuburan tanah.",
-    "bagaimana cara mengurangi hama dengan tumpangsari?": 
+    "bagaimana cara mengurangi hama dengan tumpangsari?":
         "Tumpangsari dengan tanaman pengusir hama seperti jagung dan kacang tanah bisa mengurangi serangan hama.",
-    "apakah jagung cocok ditanam setelah padi?": 
+    "apakah jagung cocok ditanam setelah padi?":
         "Ya, jagung cocok ditanam setelah padi karena membutuhkan nitrogen lebih sedikit dibanding padi.",
-    "apa keuntungan rotasi tanaman?": 
+    "apa keuntungan rotasi tanaman?":
         "Rotasi tanaman mengurangi hama, meningkatkan kesuburan tanah, dan mengurangi ketergantungan pada pupuk kimia.",
     "apa pola tanam terbaik untuk padi-jagung-kedelai?":
         "Gunakan rotasi tahunan: padi (musim hujan), jagung (kemarau I), kedelai (kemarau II).",
@@ -117,17 +127,17 @@ SISTEM_PAKAR = {
     "bagaimana cara menanam tumpangsari jagung dan kacang tanah?":
         "Tanam jagung dengan jarak 75x25 cm, dan selingi baris kacang tanah di antaranya.",
 
-    # 5️⃣ Cuaca dan Dampaknya pada Pertanian
-    "apa dampak hujan berlebih pada padi?": 
+    # Cuaca dan Dampaknya pada Pertanian
+    "apa dampak hujan berlebih pada padi?":
         "Hujan berlebih dapat menyebabkan busuk akar, penyakit jamur, dan menghambat penyerbukan.",
-    "bagaimana cara melindungi tanaman dari cuaca panas?": 
+    "bagaimana cara melindungi tanaman dari cuaca panas?":
         "Gunakan mulsa jerami, penyiraman pagi/sore, dan naungan untuk mengurangi dampak cuaca panas.",
-    "kapan waktu tanam terbaik berdasarkan musim?": 
+    "kapan waktu tanam terbaik berdasarkan musim?":
         "Waktu tanam terbaik di musim hujan: Oktober-Desember, di musim kemarau: Maret-Mei.",
-    "bagaimana cara mengatasi embun beku di tanaman?": 
+    "bagaimana cara mengatasi embun beku di tanaman?":
         "Gunakan kabut buatan atau penyiraman malam untuk mengurangi efek embun beku.",
 
-    # 6️⃣ Gulma dan Pengendaliannya
+    # Gulma dan Pengendaliannya
     "bagaimana cara mengendalikan gulma pada sawah?":
         "Gunakan penyiangan manual saat umur 15 dan 30 HST, atau gunakan herbisida selektif seperti bispiribak sodium.",
     "apa herbisida yang aman untuk padi?":
@@ -137,7 +147,7 @@ SISTEM_PAKAR = {
     "apa dampak gulma jika tidak dikendalikan?":
         "Gulma bersaing dengan tanaman utama dalam hal air, nutrisi, dan cahaya sehingga menurunkan hasil panen.",
 
-    # 7️⃣ Pascapanen dan Penyimpanan
+    # Pascapanen dan Penyimpanan
     "bagaimana cara menyimpan gabah agar tidak berjamur?":
         "Simpan gabah pada RH < 70%, suhu < 30°C, dan kelembapan < 14%. Gunakan karung berpori di tempat berventilasi.",
     "berapa kadar air gabah yang ideal untuk disimpan?":
@@ -147,7 +157,7 @@ SISTEM_PAKAR = {
     "bagaimana cara pengeringan gabah secara alami?":
         "Jemur gabah di bawah sinar matahari maksimal 6 jam/hari dengan dibolak-balik setiap 30 menit.",
 
-    # 8️⃣ Teknologi dan Mekanisasi Pertanian
+    # Teknologi dan Mekanisasi Pertanian
     "apa manfaat menggunakan traktor tangan?":
         "Traktor tangan mempercepat pengolahan lahan, menghemat tenaga, dan meningkatkan efisiensi waktu.",
     "apa itu combine harvester?":
@@ -157,7 +167,7 @@ SISTEM_PAKAR = {
     "apa keuntungan menggunakan mesin tanam padi?":
         "Mesin tanam padi mempercepat proses tanam, meratakan jarak tanam, dan mengurangi kelelahan petani.",
 
-    # 9️⃣ Pertanian Organik dan Ramah Lingkungan
+    # Pertanian Organik dan Ramah Lingkungan
     "bagaimana cara membuat kompos dari jerami padi?":
         "Jerami direndam dan dicampur EM4, ditumpuk bertahap dengan bahan hijau, lalu dibalik tiap minggu selama 3-4 minggu.",
     "apa itu pupuk hayati?":
@@ -167,7 +177,7 @@ SISTEM_PAKAR = {
     "bagaimana cara mengurangi penggunaan pestisida kimia?":
         "Gunakan musuh alami hama, rotasi tanaman, dan pestisida nabati dari daun mimba atau bawang putih.",
 
-    # 🔟 Pertanyaan Umum dan Praktik Baik Pertanian
+    # Pertanyaan Umum dan Praktik Baik Pertanian
     "apa itu HST dalam pertanian?":
         "HST adalah singkatan dari Hari Setelah Tanam, digunakan untuk menentukan waktu pemupukan, penyemprotan, dan panen.",
     "bagaimana cara mengetahui pH tanah?":
@@ -230,7 +240,7 @@ SISTEM_PAKAR = {
         "Tumpang gilir adalah menanam dua tanaman secara bergiliran pada lahan yang sama untuk efisiensi dan pemulihan tanah.",
     "apa manfaat menggunakan biochar?":
         "Biochar meningkatkan kapasitas tukar kation, menyerap racun, memperbaiki struktur tanah, dan menyimpan karbon.",
-        # 101️⃣ - 120️⃣
+        # 101 - 120
     "bagaimana cara mengendalikan gulma secara mekanik?":
         "Pengendalian mekanik dilakukan dengan mencabut manual, menggunakan alat bajak, atau mencangkul secara rutin untuk menghilangkan gulma.",
     "apa itu pestisida selektif dan keuntungannya?":
@@ -271,7 +281,7 @@ SISTEM_PAKAR = {
         "Tambah bahan organik, gunakan pupuk hayati, rotasi tanaman, dan teknik konservasi tanah yang tepat.",
     "apa pentingnya sertifikasi organik bagi produk pertanian?":
         "Sertifikasi menjamin produk bebas bahan kimia sintetis, meningkatkan nilai jual dan kepercayaan konsumen.",
-        # 121️⃣ - 150️⃣
+        # 121 - 150
     "apa manfaat penggunaan pupuk organik cair?":
         "Pupuk organik cair mempercepat penyerapan nutrisi, meningkatkan kesuburan tanah, dan ramah lingkungan.",
     "bagaimana cara mendeteksi serangan hama tikus di sawah?":
@@ -317,7 +327,7 @@ SISTEM_PAKAR = {
     "bagaimana cara mencegah kerusakan akibat embun beku pada tanaman sayur?":
         "Gunakan penutup plastik, semprot air pada malam hari untuk membentuk lapisan pelindung, dan pilih waktu tanam yang tepat.",
     "apa itu sistem pertanian organik terpadu?":
-        "Sistem yang menggabungkan budidaya tanaman, peternakan, dan pengelolaan sumber daya secara berkelanjutan.",
+        "Sistem yang menggabungkan budidaya tanaman, peternakan, perikanan, dan pengelolaan sumber daya secara berkelanjutan.",
     "bagaimana cara menentukan waktu panen yang tepat untuk sayuran?":
         "Perhatikan ukuran, warna, dan tekstur sesuai varietas serta kondisi pasar.",
     "apa itu sistem pertanian berkelanjutan?":
@@ -333,6 +343,15 @@ SISTEM_PAKAR = {
 
 }
 
+def nlp_extract_entities(text):
+    doc = nlp(text)
+    entities = [(ent.label_, ent.text) for ent in doc.ents]
+    lemmas = [token.lemma_ for token in doc if token.pos_ in ["VERB", "NOUN"]]
+    return {
+        "entities": entities,
+        "lemmas": lemmas
+    }
+
 def is_relevant_question(question):
     """Memeriksa apakah pertanyaan berhubungan dengan pertanian atau cuaca"""
     question_lower = question.lower()
@@ -340,11 +359,28 @@ def is_relevant_question(question):
         "padi", "hama", "tanaman", "pupuk", "sawah", "cuaca", "iklim",
         "irigasi", "panen", "pertanian", "pestisida", "organik", "hujan"
     ])
-def fuzzy_match(user_message, threshold=0.6):
-    matches = difflib.get_close_matches(user_message, SISTEM_PAKAR.keys(), n=1, cutoff=threshold)
-    if matches:
-        return matches[0]
+
+def fuzzy_match_spacy(user_message, threshold=0.85):
+    """Fuzzy match pakai similarity spaCy NLP"""
+    if nlp is None: # Pastikan nlp sudah terinisialisasi
+        return None
+    user_doc = nlp(user_message)
+    best_score = 0
+    best_key = None
+    for key in SISTEM_PAKAR:
+        key_doc = nlp(key)
+        score = user_doc.similarity(key_doc)
+        if score > best_score:
+            best_score = score
+            best_key = key
+    if best_score >= threshold:
+        return best_key
     return None
+
+def summarize_answer(answer):
+    "Fungsi untuk meringkas jawaban panjang menjadi versi pendek."
+    lines = answer.split('\n')
+    return '\n'.join(lines[:3]) + "..." if len(lines) > 3 else answer
 
 def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
     rekomendasi = []
@@ -355,13 +391,13 @@ def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
         rekomendasi.extend(["Jagung", "Kedelai", "Ubi Kayu"])
     if suhu and suhu < 20:
         rekomendasi.extend(["Kentang", "Wortel", "Kubis"])
-    if curah_hujan and curah_hujan > 200:  # Curah hujan tinggi dalam mm
+    if curah_hujan and curah_hujan > 200:
         rekomendasi = [t for t in rekomendasi if t not in ["Cabai", "Bawang Merah"]]
 
     return rekomendasi if rekomendasi else ["Tidak ada rekomendasi spesifik"]
 
 # Contoh penggunaan:
-print(rekomendasi_tanaman(musim="kemarau", suhu=25, curah_hujan=100))
+# print(rekomendasi_tanaman(musim="kemarau", suhu=25, curah_hujan=100))
 # Output: ['Jagung', 'Kedelai', 'Ubi Kayu']
 
 @app.route("/recommend_crop", methods=["POST"])
@@ -373,15 +409,15 @@ def recommend_crop():
     curah_hujan = float(data.get("curah_hujan", 0))
 
     if not musim or suhu <= 0 or curah_hujan <= 0:
-        return jsonify({"response": "⚠️ Masukkan data musim, suhu, dan curah hujan yang valid."})
+        return jsonify({"response": "Masukkan data musim, suhu, dan curah hujan yang valid."})
 
     rekomendasi = rekomendasi_tanaman(musim=musim, suhu=suhu, curah_hujan=curah_hujan)
     return jsonify({
-        "response": f"🌱 Rekomendasi tanaman untuk kondisi tersebut: {', '.join(rekomendasi)}"
+        "response": f"Rekomendasi tanaman untuk kondisi tersebut: {', '.join(rekomendasi)}"
     })
 
 
-last_response = ""  # Simpan jawaban terakhir untuk bisa diringkas
+last_response = ""  # Simpan jawaban untuk bisa diringkas
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -390,47 +426,48 @@ def chat():
     user_message = data.get("message", "").strip().lower()
 
     if not user_message:
-        return jsonify({"response": "⚠️ Mohon ketik sesuatu untuk bertanya."})
+        return jsonify({"response": "Ketik untuk bertanya."})
 
-    # ✅ Jika pengguna ingin merangkum jawaban sebelumnya
+    # Jika pengguna ingin merangkum jawaban sebelumnya
     if "ringkas jawabannya" in user_message or "persingkat jawabannya" in user_message:
         if last_response:
             summarized_response = summarize_answer(last_response)
             return jsonify({"response": summarized_response})
         else:
-            return jsonify({"response": "⚠️ Tidak ada jawaban sebelumnya untuk diringkas."})
+            return jsonify({"response": "Tidak ada jawaban sebelumnya untuk diringkas."})
 
-    # ✅ Cek apakah pertanyaan ada di sistem pakar (Exact Match / Fuzzy Match)
+    # Inisialisasi bot_response di awal, ini yang menyebabkan UnboundLocalError sebelumnya
+    bot_response = None
+
+    # Cek apakah pertanyaan ada di sistem pakar (Exact Match)
     if user_message in SISTEM_PAKAR:
-        last_response = SISTEM_PAKAR[user_message]
-        return jsonify({"response": last_response})
+        bot_response = SISTEM_PAKAR[user_message]
+    else:
+        # Cek Fuzzy Match di SISTEM_PAKAR
+        matched_key = fuzzy_match_spacy(user_message)
+        if matched_key:
+            bot_response = SISTEM_PAKAR[matched_key]
 
-    matched_key = fuzzy_match(user_message)
-    if matched_key:
-        last_response = SISTEM_PAKAR[matched_key]
-        return jsonify({
-            "response": f"\n\n{last_response}"
-        })
+    # Jika sistem pakar tidak ada match, coba ke AI (Together AI)
+    if bot_response is None: # Baris ini sekarang aman karena bot_response selalu terinisialisasi
+        if not is_relevant_question(user_message):
+            bot_response = "Maaf, saya hanya menjawab pertanyaan tentang pertanian dan cuaca."
+        else:
+            try:
+                # Pastikan get_answer_from_ai mengembalikan string
+                bot_response = get_answer_from_ai(user_message)
+                if not isinstance(bot_response, str) or not bot_response.strip():
+                    bot_response = "Maaf, AI tidak dapat memberikan jawaban untuk saat ini."
+            except Exception as e:
+                print(f"Error saat memanggil Together AI atau memproses AI response: {e}")
+                bot_response = "Maaf, ada masalah teknis saat memproses permintaan AI. Coba lagi nanti."
 
-
-    # ✅ Cek apakah pertanyaan relevan dengan pertanian/cuaca
-    if not is_relevant_question(user_message):
-        return jsonify({"response": "⚠️ Maaf, saya hanya menjawab pertanyaan tentang pertanian dan cuaca."})
-
-    # 🔁 Jawaban dari Together AI
-    response = get_answer_from_ai(user_message)
-    last_response = response
-    return jsonify({"response": response})
-
-
-def summarize_answer(answer):
-    """Fungsi untuk meringkas jawaban panjang menjadi versi pendek."""
-    lines = answer.split('\n')
-    return '\n'.join(lines[:3]) + "..." if len(lines) > 3 else answer
+    last_response = bot_response if bot_response is not None else "Maaf, saya tidak bisa menemukan jawaban."
+    return jsonify({"response": last_response})
 
 
 def get_answer_from_ai(user_message):
-    """Fungsi untuk mendapatkan jawaban dari Together AI."""
+    "Fungsi untuk mendapatkan jawaban dari Together AI."
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
@@ -453,10 +490,11 @@ def get_answer_from_ai(user_message):
         if response.status_code == 200 and "choices" in response_json:
             return response_json["choices"][0].get("message", {}).get("content", "").strip()
         else:
-            return "⚠️ Tidak bisa mengambil jawaban dari AI. Periksa koneksi atau coba lagi nanti."
+            # Lebih detail error handling dari Together AI
+            error_message = response_json.get("error", {}).get("message", "Unknown error from Together AI")
+            return f"Tidak bisa mengambil jawaban dari AI: {error_message}. Status: {response.status_code}"
     except Exception as e:
-        return f"⚠️ Terjadi kesalahan saat menghubungi AI: {str(e)}"
-
+        return f"Terjadi kesalahan saat menghubungkan AI: {str(e)}"
 
 
 @app.route("/weather", methods=["POST"])
@@ -466,9 +504,9 @@ def get_weather():
     city = data.get("city", "").strip()
 
     if not city:
-        return jsonify({"response": "⚠️ Mohon masukkan nama kota untuk mendapatkan informasi cuaca."})
+        return jsonify({"response": "Masukkan nama kota untuk mendapatkan informasi cuaca."})
     if not city.isalpha():
-        return jsonify({"response": "⚠️ Nama kota harus berupa huruf tanpa angka atau simbol."})
+        return jsonify({"response": "Nama kota harus berupa huruf tanpa angka atau simbol."})
 
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=id"
 
@@ -482,24 +520,24 @@ def get_weather():
             description = weather_info.get("description", "Tidak tersedia").capitalize()
             temperature = weather_data.get("main", {}).get("temp", "Tidak tersedia")
             humidity = weather_data.get("main", {}).get("humidity", "Tidak tersedia")
-            wind_speed = weather_data.get("wind", {}).get("speed", "Tidak tersedia")
+            wind_speed = weather_data.get("wind", {}).get("wind", {}).get("speed", "Tidak tersedia") # Fixed: Use wind_speed instead of wind
 
             weather_report = (
-                f"📍 *Cuaca di {city_name}:*\n"
-                f"🌦️ *Kondisi:* {description}\n"
-                f"🌡️ *Suhu:* {temperature}°C\n"
-                f"💧 *Kelembapan:* {humidity}%\n"
-                f"🌬️ *Kecepatan Angin:* {wind_speed} m/s\n"
-                f"\n🔹 *Semoga informasi ini bermanfaat!* 😊"
+                f"Cuaca di {city_name}\n"
+                f"Kondisi: {description}\n"
+                f"Suhu: {temperature}°C\n"
+                f"Kelembapan: {humidity}%\n"
+                f"Kecepatan Angin: {wind_speed} m/s\n"
+                f"\n Semoga informasi ini bermanfaat! "
             )
-            """ return jsonify({"response": weather_report}) """
+            return jsonify({"response": weather_report}) # <--- INI SUDAH DIHAPUS KOMENTARNYA
         else:
-            weather_report = "⚠️ Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
+            weather_report = "Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
 
     except Exception as e:
-        weather_report = f"⚠️ Maaf, layanan Together AI sedang sibuk. Coba lagi nanti: {str(e)}"
+        weather_report = f" Maaf, terjadi kesalahan saat mengambil data cuaca: {str(e)}"
 
-    return jsonify({"response": weather_report})
+    return jsonify({"response": weather_report}) # Ini akan dijalankan jika ada error di try/except
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

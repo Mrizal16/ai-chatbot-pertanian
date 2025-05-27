@@ -3,362 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Chatbot AI Pertanian</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-      display: flex;
-      height: 100vh;
-      background: #f0f4f8;
-    }
-
-    .sidebar {
-      width: 260px;
-      background-color: #2e7d32;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      padding: 20px;
-    }
-
-    .sidebar h2 {
-      margin-bottom: 20px;
-      font-size: 20px;
-    }
-
-    .sidebar button {
-      background-color: #66bb6a;
-      border: none;
-      padding: 10px;
-      border-radius: 8px;
-      color: white;
-      font-weight: bold;
-      margin-bottom: 10px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    .sidebar button:hover {
-      background-color: #4caf50;
-    }
-
-    .chat-container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background-color: white;
-    }
-
-    .chat-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 15px 20px;
-      background-color: #ffffff;
-      border-bottom: 1px solid #ddd;
-    }
-
-    .chat-header h1 {
-      font-size: 22px;
-      color: #2e7d32;
-    }
-
-    .chat-header button {
-      background-color: #2e7d32;
-      color: white;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    #chatbox {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-      background-color: #f9f9f9;
-    }
-
-    .input-area {
-      display: flex;
-      padding: 15px 20px;
-      border-top: 1px solid #ccc;
-      background-color: #ffffff;
-    }
-
-    .input-area input {
-      flex: 1;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      margin-right: 10px;
-      font-size: 14px;
-    }
-
-    .input-area button {
-      background-color: #4caf50;
-      color: white;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-/*     .input-area button:last-child {
-      background-color: #e53935;
-      margin-left: 8px;
-    } */
-
-    .message {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 10px;
-}
-
-.message .avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  margin-right: 10px;
-}
-
-.message.bot {
-  flex-direction: row;
-}
-
-.message.user {
-  flex-direction: row-reverse;
-}
-
-.message.user .text {
-  background-color: #DCF8C6;
-}
-
-.message.bot .text {
-  background-color: #F1F0F0;
-}
-
-.text {
-  max-width: 80%;
-  padding: 10px;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-  </style>
+  <title>taniBot</title>
+  <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Poppins:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="sidebar">
-        <h2>💬 Riwayat</h2>
-        <div id="history"></div>
-        <button onclick="newChat()">Sesi Baru</button>
+  <div class="container">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo" id="sidebarLogoBtn" tabindex="0">
+        <img src="image/tani.svg" class="logo-img"/>
       </div>
-    
-      <div class="chat-container">
-        <div class="chat-header">
-          <h1>🌾 Chatbot AI Pertanian</h1>
-          <button onclick="getWeather()">🌦️ Cek Cuaca</button>
-        </div>
-        <div id="chatbox"></div>
-        <div class="input-area">
-          <input type="text" id="userInput" placeholder="Tanyakan sesuatu..." onkeypress="handleKeyPress(event)">
-          <button onclick="sendMessage()">Kirim</button>
-          <!-- <button onclick="clearChat()">Hapus</button> -->
+      <button class="new-chat-btn" id="newChatBtn">
+        <span class="iconify" data-icon="pepicons-pop:plus" style="font-size:1.6em; margin-right:8px;"></span> New Chat
+      </button>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Terkini</div>
+        <ul id="history" class="chat-history"></ul>
+      </div>
+    </aside>
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    <main class="main-area">
+      <button class="weather-btn" id="weatherBtn">
+        <span class="iconify weather-btn-icon" data-icon="fluent:weather-hail-day-24-filled" style="font-size:2.2em; color:#824621;"></span>
+      </button>
+      <div class="main-content">
+        <div id="weatherAlert" class="weather-alert"></div>
+        <div id="chatbox" class="chatbox"></div>
+        <h1 class="main-title" id="mainTitle">Ingin cek cuaca, pupuk, atau tips bertani hari ini?</h1>
+        <div class="input-row">
+          <input type="text" id="userInput" class="main-input" placeholder="Tanyakan seputar pertanian pada saya" autocomplete="off" />
+          <button class="send-btn" id="sendBtn">Kirim</button>
         </div>
       </div>
-    
-      <script>
-        let sessionId = null;
-        let sessionName = "";
-      
-        document.addEventListener("DOMContentLoaded", () => {
-          loadSessionList();
-        });
-      
-        async function startNewSession() {
-          const name = prompt("Nama sesi baru:") || "Sesi " + new Date().toLocaleString();
-          const res = await fetch("chat_api.php?action=new_session", {
-            method: "POST",
-            body: new URLSearchParams({ session_name: name })
-          });
-          const data = await res.json();
-          if (data.session_id) {
-            sessionId = data.session_id;
-            sessionName = name;
-            clearChatbox();
-            loadSessionList();
-          }
-        }
-      
-        async function loadSessionList() {
-  const historyDiv = document.getElementById("history");
-  historyDiv.innerHTML = "";
-
-  const res = await fetch("chat_api.php?action=get_sessions");
-  const sessions = await res.json();
-
-  sessions.forEach(s => {
-    const container = document.createElement("div");
-    container.style.display = "flex";
-    container.style.justifyContent = "space-between";
-    container.style.alignItems = "center";
-    container.style.marginBottom = "5px";
-
-    const btn = document.createElement("button");
-    btn.textContent = s.session_name;
-    btn.style.flex = "1";
-    btn.onclick = () => {
-      sessionId = s.id;
-      sessionName = s.session_name;
-      loadChatHistory(sessionId);
-    };
-
-    const del = document.createElement("button");
-    del.textContent = "🗑️";
-    del.style.marginLeft = "5px";
-    del.style.background = "#c62828";
-    del.style.color = "white";
-    del.style.border = "none";
-    del.style.borderRadius = "4px";
-    del.style.padding = "4px 6px";
-    del.style.cursor = "pointer";
-    del.onclick = async () => {
-      if (confirm(`Hapus sesi "${s.session_name}"?`)) {
-        await fetch("chat_api.php?action=delete_session", {
-          method: "POST",
-          body: new URLSearchParams({ session_id: s.id })
-        });
-        if (sessionId == s.id) {
-          sessionId = null;
-          clearChatbox();
-        }
-        loadSessionList();
-      }
-    };
-
-    container.appendChild(btn);
-    container.appendChild(del);
-    historyDiv.appendChild(container);
-  });
-
-  if (!sessionId && sessions.length === 0) {
-    await startNewSession();
-  }
-}
-
-      
-        async function loadChatHistory(id) {
-          clearChatbox();
-          const res = await fetch(`chat_api.php?action=get_messages&session_id=${id}`);
-          const messages = await res.json();
-          messages.forEach(m => {
-            appendMessage(m.sender === "user" ? "Anda" : "Bot", m.message, m.sender === "user");
-          });
-        }
-      
-        function appendMessage(sender, message, isUser) {
-          const chatbox = document.getElementById("chatbox");
-          const msgDiv = document.createElement("div");
-          msgDiv.className = `message ${isUser ? "user" : "bot"}`;
-      
-          const avatar = document.createElement("img");
-          avatar.className = "avatar";
-          avatar.src = isUser ? "user-avatar.webp" : "bot-avatar.webp"; // ganti sesuai path gambar kamu
-          avatar.alt = isUser ? "User" : "Bot";
-
-          const textDiv = document.createElement("div");
-          textDiv.className = "text";
-          textDiv.innerHTML = `<strong>${sender}:</strong> ${message}`;
-      
-          msgDiv.appendChild(avatar);
-          msgDiv.appendChild(textDiv);
-          chatbox.appendChild(msgDiv);
-          chatbox.scrollTop = chatbox.scrollHeight;
-        }
-      
-        async function sendMessage() {
-          const input = document.getElementById("userInput");
-          const userMessage = input.value.trim();
-          if (!userMessage || !sessionId) return;
-      
-          appendMessage("Anda", userMessage, true);
-          input.value = "";
-      
-          // Simpan pesan user ke backend
-          await fetch("chat_api.php?action=save_message", {
-            method: "POST",
-            body: new URLSearchParams({
-              session_id: sessionId,
-              sender: "user",
-              message: userMessage
-            })
-          });
-      
-          appendMessage("Bot", "⏳ Mengetik...", false);
-      
-          try {
-            const response = await fetch("http://127.0.0.1:5000/chat", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ message: userMessage }),
-            });
-      
-            const result = await response.json();
-            document.querySelectorAll(".message.bot .text").forEach(e => {
-              if (e.innerText.includes("Mengetik...")) e.parentElement.remove();
-            });
-            appendMessage("Bot", result.response, false);
-      
-            // Simpan pesan bot ke backend
-            await fetch("chat_api.php?action=save_message", {
-              method: "POST",
-              body: new URLSearchParams({
-                session_id: sessionId,
-                sender: "bot",
-                message: result.response
-              })
-            });
-      
-          } catch (error) {
-            appendMessage("Bot", "⚠️ Gagal terhubung ke server.", false);
-          }
-        }
-      
-        function handleKeyPress(event) {
-          if (event.key === "Enter") sendMessage();
-        }
-      
-        function clearChatbox() {
-          document.getElementById("chatbox").innerHTML = "";
-        }
-      
-        async function newChat() {
-          await startNewSession();
-        }
-      
-        function getWeather() {
-          const city = prompt("Masukkan nama kota:");
-          if (!city) return;
-      
-          fetch("http://127.0.0.1:5000/weather", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ city }),
-          })
-            .then(res => res.json())
-            .then(data => appendMessage("Cuaca", data.response, false))
-            .catch(() => appendMessage("Bot", "⚠️ Gagal mengambil data cuaca.", false));
-        }
-      </script>
-      
-      
+      <button id="mobileSidebarBtn" class="mobile-sidebar-btn">
+        <span class="iconify" data-icon="tabler:layout-sidebar-left-expand-filled" style="font-size:2.2em; color:#824621;"></span>
+      </button>
+    </main>
+  </div>
+  <script src="main.js"></script>
 </body>
 </html>

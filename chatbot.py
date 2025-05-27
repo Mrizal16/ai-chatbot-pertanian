@@ -3,6 +3,7 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
+import difflib
 
 load_dotenv()
 
@@ -26,9 +27,6 @@ def home():
         "endpoints": {
             "/chat": "Gunakan metode POST untuk bertanya ke chatbot.",
             "/weather": "Gunakan metode POST untuk mendapatkan informasi cuaca.",
-            "/fertilizer": "Hitung kebutuhan pupuk berdasarkan luas lahan.",
-            "/fertilizer_v2": "Hitung pupuk berdasarkan luas, jenis tanaman, dan target panen.",
-            "/fertilizer_plan": "Perencanaan pupuk berdasarkan target panen.",
             "/recommend_crop": "Rekomendasi tanaman berdasarkan musim, suhu, dan curah hujan."
         }
     })
@@ -48,7 +46,16 @@ SISTEM_PAKAR = {
         "Waktu terbaik menanam padi adalah Oktober-Desember (musim hujan) dan Maret-Mei (musim kemarau dengan irigasi).",
     "kapan menanam jagung agar hasil optimal?": 
         "Jagung sebaiknya ditanam pada awal musim hujan (Oktober) atau akhir musim kemarau (Juli) untuk hasil maksimal.",
-
+    "bagaimana cara mengatasi blast pada padi?":
+        "Gunakan fungisida berbahan aktif triazol dan tanam varietas tahan penyakit seperti IR64 atau Inpari 32.",
+    "apa gejala penyakit busuk batang pada jagung?":
+        "Batang berwarna coklat kehitaman, lunak, mudah patah. Disebabkan oleh jamur *Fusarium spp.*.",
+    "bagaimana mengendalikan tikus sawah?":
+        "Gunakan trap mekanik, musuh alami seperti burung hantu, dan sanitasi lahan secara rutin.",
+    "apa penyebab daun jagung menggulung?":
+        "Kemungkinan karena kekurangan air, serangan penggerek daun, atau kekurangan kalium.",
+    "mengapa daun padi berubah warna ungu?":
+        "Daun ungu bisa jadi karena defisiensi fosfor, terutama pada tanah masam atau miskin hara.",
 
     # 2️⃣ Pemupukan & Nutrisi Tanaman
     "kapan waktu terbaik untuk memupuk padi?": 
@@ -59,6 +66,16 @@ SISTEM_PAKAR = {
         "Pupuk dengan nitrogen tinggi antara lain Urea (N=46%), ZA (N=21%), dan pupuk organik dari kotoran ayam.",
     "bagaimana cara mengetahui tanaman kekurangan kalium?": 
         "Gejala kekurangan kalium: Daun menguning dari tepi, pertumbuhan terhambat, dan batang lemah.",
+    "apa pupuk yang cocok untuk jagung saat awal tanam?":
+        "Gunakan NPK seimbang (15:15:15) atau kombinasi Urea dan SP36 pada saat tanam.",
+    "bagaimana ciri tanaman kekurangan fosfor?":
+        "Daun tua berwarna ungu kebiruan, pertumbuhan lambat, dan akar kurang berkembang.",
+    "berapa kebutuhan pupuk KCl untuk padi?":
+        "Dosis KCl sekitar 100 kg/ha, diberikan bersamaan dengan pupuk susulan.",
+    "apa manfaat pupuk kandang untuk tanaman?":
+        "Meningkatkan struktur tanah, menambah hara makro dan mikro, serta meningkatkan aktivitas mikroba.",
+    "bagaimana pupuk organik cair diaplikasikan?":
+        "Disemprotkan ke daun saat pagi atau sore, biasanya setiap 7–10 hari sekali.",
 
     # 3️⃣ Pengairan dan Irigasi
     "berapa tinggi air yang ideal untuk sawah padi?": 
@@ -69,6 +86,16 @@ SISTEM_PAKAR = {
         "Gunakan sistem irigasi berselang atau AWD (Alternate Wetting and Drying) untuk menghemat air hingga 30%.",
     "apa dampak kelebihan air pada tanaman?": 
         "Kelebihan air menyebabkan akar busuk, pertumbuhan terhambat, dan meningkatkan risiko penyakit jamur.",
+    "apa itu sistem irigasi tetes?":
+        "Irigasi tetes mengalirkan air langsung ke akar tanaman secara perlahan, hemat air dan efisien.",
+    "bagaimana cara mencegah genangan air di lahan pertanian?":
+        "Buat saluran drainase yang baik dan hindari penanaman di cekungan.",
+    "apakah hujan malam berdampak buruk pada pertumbuhan tanaman?":
+        "Tidak secara langsung, tapi dapat meningkatkan kelembaban yang memicu penyakit jamur.",
+    "bagaimana cara meningkatkan efisiensi penggunaan air di sawah?":
+        "Gunakan metode AWD, sesuaikan tinggi air, dan tanam varietas tahan kering.",
+    "berapa kebutuhan air untuk tanaman jagung per musim?":
+        "Sekitar 500–800 mm selama siklus tanam, tergantung varietas dan cuaca.",
 
     # 4️⃣ Pola Tanam & Rotasi Tanaman
     "tanaman apa yang cocok ditanam setelah panen padi?": 
@@ -79,6 +106,16 @@ SISTEM_PAKAR = {
         "Ya, jagung cocok ditanam setelah padi karena membutuhkan nitrogen lebih sedikit dibanding padi.",
     "apa keuntungan rotasi tanaman?": 
         "Rotasi tanaman mengurangi hama, meningkatkan kesuburan tanah, dan mengurangi ketergantungan pada pupuk kimia.",
+    "apa pola tanam terbaik untuk padi-jagung-kedelai?":
+        "Gunakan rotasi tahunan: padi (musim hujan), jagung (kemarau I), kedelai (kemarau II).",
+    "kenapa rotasi tanaman penting dilakukan?":
+        "Mengurangi penumpukan patogen, memperbaiki struktur tanah, dan mengoptimalkan penggunaan hara.",
+    "apa manfaat menanam tanaman legum setelah padi?":
+        "Legum seperti kacang dapat menambat nitrogen dan memperbaiki kesuburan tanah.",
+    "apa perbedaan tumpangsari dan rotasi tanaman?":
+        "Tumpangsari menanam beberapa tanaman sekaligus, rotasi adalah bergantian antar musim.",
+    "bagaimana cara menanam tumpangsari jagung dan kacang tanah?":
+        "Tanam jagung dengan jarak 75x25 cm, dan selingi baris kacang tanah di antaranya.",
 
     # 5️⃣ Cuaca dan Dampaknya pada Pertanian
     "apa dampak hujan berlebih pada padi?": 
@@ -88,9 +125,212 @@ SISTEM_PAKAR = {
     "kapan waktu tanam terbaik berdasarkan musim?": 
         "Waktu tanam terbaik di musim hujan: Oktober-Desember, di musim kemarau: Maret-Mei.",
     "bagaimana cara mengatasi embun beku di tanaman?": 
-        "Gunakan kabut buatan atau penyiraman malam untuk mengurangi efek embun beku."
+        "Gunakan kabut buatan atau penyiraman malam untuk mengurangi efek embun beku.",
 
-    
+    # 6️⃣ Gulma dan Pengendaliannya
+    "bagaimana cara mengendalikan gulma pada sawah?":
+        "Gunakan penyiangan manual saat umur 15 dan 30 HST, atau gunakan herbisida selektif seperti bispiribak sodium.",
+    "apa herbisida yang aman untuk padi?":
+        "Herbisida selektif seperti penoksulam atau oksadiazon aman untuk padi jika digunakan sesuai dosis.",
+    "kapan waktu terbaik menyemprot herbisida?":
+        "Waktu terbaik menyemprot herbisida adalah pagi hari saat cuaca cerah dan tidak berangin.",
+    "apa dampak gulma jika tidak dikendalikan?":
+        "Gulma bersaing dengan tanaman utama dalam hal air, nutrisi, dan cahaya sehingga menurunkan hasil panen.",
+
+    # 7️⃣ Pascapanen dan Penyimpanan
+    "bagaimana cara menyimpan gabah agar tidak berjamur?":
+        "Simpan gabah pada RH < 70%, suhu < 30°C, dan kelembapan < 14%. Gunakan karung berpori di tempat berventilasi.",
+    "berapa kadar air gabah yang ideal untuk disimpan?":
+        "Kadar air ideal gabah untuk disimpan adalah 12-14% agar tidak berjamur.",
+    "apa penyebab gabah cepat busuk saat disimpan?":
+        "Gabah cepat busuk karena kadar air tinggi dan penyimpanan di tempat lembap.",
+    "bagaimana cara pengeringan gabah secara alami?":
+        "Jemur gabah di bawah sinar matahari maksimal 6 jam/hari dengan dibolak-balik setiap 30 menit.",
+
+    # 8️⃣ Teknologi dan Mekanisasi Pertanian
+    "apa manfaat menggunakan traktor tangan?":
+        "Traktor tangan mempercepat pengolahan lahan, menghemat tenaga, dan meningkatkan efisiensi waktu.",
+    "apa itu combine harvester?":
+        "Combine harvester adalah mesin panen multifungsi yang bisa memanen, merontokkan, dan membersihkan gabah sekaligus.",
+    "apakah drone bisa digunakan dalam pertanian?":
+        "Ya, drone dapat digunakan untuk pemetaan lahan, monitoring pertumbuhan tanaman, dan penyemprotan pestisida.",
+    "apa keuntungan menggunakan mesin tanam padi?":
+        "Mesin tanam padi mempercepat proses tanam, meratakan jarak tanam, dan mengurangi kelelahan petani.",
+
+    # 9️⃣ Pertanian Organik dan Ramah Lingkungan
+    "bagaimana cara membuat kompos dari jerami padi?":
+        "Jerami direndam dan dicampur EM4, ditumpuk bertahap dengan bahan hijau, lalu dibalik tiap minggu selama 3-4 minggu.",
+    "apa itu pupuk hayati?":
+        "Pupuk hayati mengandung mikroorganisme yang membantu menyuburkan tanah dan meningkatkan penyerapan unsur hara.",
+    "apa manfaat pupuk kandang fermentasi?":
+        "Pupuk kandang fermentasi lebih higienis, kaya mikroba baik, dan tidak berbau menyengat.",
+    "bagaimana cara mengurangi penggunaan pestisida kimia?":
+        "Gunakan musuh alami hama, rotasi tanaman, dan pestisida nabati dari daun mimba atau bawang putih.",
+
+    # 🔟 Pertanyaan Umum dan Praktik Baik Pertanian
+    "apa itu HST dalam pertanian?":
+        "HST adalah singkatan dari Hari Setelah Tanam, digunakan untuk menentukan waktu pemupukan, penyemprotan, dan panen.",
+    "bagaimana cara mengetahui pH tanah?":
+        "Gunakan alat pH meter digital atau kertas lakmus, idealnya pH tanah padi 5.5–6.5.",
+    "kenapa padi rebah sebelum panen?":
+        "Padi rebah karena angin kencang, batang lemah, atau pemupukan nitrogen berlebih.",
+    "apa penyebab daun padi menguning?":
+        "Daun padi menguning bisa disebabkan kekurangan nitrogen, serangan wereng, atau genangan air berlebih.",
+    "apa perbedaan pupuk organik dan anorganik?":
+        "Pupuk organik berasal dari bahan alami dan lambat diserap, sedangkan pupuk anorganik buatan pabrik dan cepat diserap.",
+    "kapan waktu panen terbaik untuk padi?":
+        "Panen padi saat 85-95% bulir menguning dan kadar air sekitar 20-25%.",
+    "apa itu konservasi tanah dan air dalam pertanian?":
+        "Konservasi tanah dan air adalah upaya menjaga kesuburan tanah dan ketersediaan air melalui terasering, penanaman penutup tanah, dan pengelolaan air hujan.",
+    "bagaimana pengaruh kadar pH tanah terhadap tanaman?":
+        "pH tanah mempengaruhi ketersediaan unsur hara. Tanaman umumnya tumbuh optimal pada pH 5,5–7.",
+    "bagaimana cara meningkatkan pH tanah yang terlalu asam?":
+        "Gunakan kapur pertanian (dolomit atau kalsit) sesuai dosis untuk menaikkan pH tanah.",
+    "apa itu pertanian berbasis teknologi digital (smart farming)?":
+        "Smart farming menggunakan sensor, drone, dan analitik data untuk meningkatkan efisiensi dan hasil pertanian.",
+    "apa kelebihan sistem tanam tanpa olah tanah (TOT)?":
+        "TOT menjaga struktur tanah, mengurangi erosi, dan meningkatkan kandungan bahan organik.",
+    "apa bahaya residu pestisida dalam pertanian?":
+        "Residu pestisida berlebih mencemari lingkungan, membahayakan kesehatan, dan memicu resistensi hama.",
+    "bagaimana pengaruh pupuk berlebih terhadap lingkungan?":
+        "Pupuk berlebih menyebabkan eutrofikasi, pencemaran air tanah, dan kerusakan ekosistem.",
+    "apa itu pestisida nabati?":
+        "Pestisida nabati berasal dari tanaman seperti daun mimba, serai wangi, atau tembakau, aman dan ramah lingkungan.",
+    "bagaimana cara mengukur kadar kelembaban tanah?":
+        "Gunakan alat tensiometer atau sensor kelembaban tanah digital untuk pengukuran akurat.",
+    "apa itu sistem irigasi tetes dan manfaatnya?":
+        "Irigasi tetes menyalurkan air langsung ke akar tanaman, menghemat air dan mengurangi pertumbuhan gulma.",
+    "apa pentingnya diversifikasi tanaman?":
+        "Diversifikasi mengurangi risiko gagal panen, meningkatkan pendapatan petani, dan menjaga kesuburan tanah.",
+    "bagaimana cara mengatasi tanah yang terlalu padat?":
+        "Gunakan cangkul atau bajak untuk menggemburkan, tambahkan kompos, dan hindari injakan berlebih.",
+    "apa itu mulsa dan manfaatnya?":
+        "Mulsa adalah bahan penutup tanah (organik/anorganik) untuk menjaga kelembaban, menekan gulma, dan menstabilkan suhu.",
+    "bagaimana cara deteksi awal penyakit tanaman?":
+        "Pantau perubahan warna daun, bentuk tanaman, dan gunakan aplikasi deteksi penyakit berbasis AI atau kamera.",
+    "apa itu sistem pertanian terpadu?":
+        "Pertanian terpadu menggabungkan peternakan, perikanan, dan pertanian untuk saling mendukung dan meningkatkan efisiensi.",
+    "bagaimana cara menjaga keanekaragaman hayati di lahan pertanian?":
+        "Tanam berbagai jenis tanaman, pelihara tanaman pagar hidup, dan hindari penggunaan pestisida sintetis berlebih.",
+    "apa itu pupuk hayati dan kelebihannya?":
+        "Pupuk hayati mengandung mikroba baik yang membantu ketersediaan unsur hara. Ramah lingkungan dan memperbaiki struktur tanah.",
+    "bagaimana pengaruh rotasi tanaman terhadap gulma?":
+        "Rotasi tanaman memutus siklus hidup gulma spesifik, mengurangi infestasi dan resistensi terhadap herbisida.",
+    "apa fungsi tanaman penutup tanah?":
+        "Menjaga kelembaban, mengurangi erosi, menambah bahan organik, dan menekan gulma.",
+    "apa itu sistem pertanian konservasi?":
+        "Pertanian konservasi meliputi minimal olah tanah, penanaman berkelanjutan, dan penutup tanah untuk menjaga ekosistem dan hasil jangka panjang.",
+    "bagaimana cara membuat pestisida alami dari bawang putih?":
+        "Haluskan 100g bawang putih, campur dengan 1L air dan 1 sdm sabun cair. Diamkan 24 jam dan saring sebelum semprotkan.",
+    "apa itu teknik pemangkasan dan manfaatnya?":
+        "Pemangkasan adalah memotong bagian tanaman untuk merangsang pertumbuhan, produksi, dan mencegah penyakit.",
+    "bagaimana mengatasi kekeringan di lahan tadah hujan?":
+        "Gunakan embung, mulsa, irigasi tetes, dan tanam varietas tahan kering.",
+    "apa itu sistem tumpang gilir tanaman?":
+        "Tumpang gilir adalah menanam dua tanaman secara bergiliran pada lahan yang sama untuk efisiensi dan pemulihan tanah.",
+    "apa manfaat menggunakan biochar?":
+        "Biochar meningkatkan kapasitas tukar kation, menyerap racun, memperbaiki struktur tanah, dan menyimpan karbon.",
+        # 101️⃣ - 120️⃣
+    "bagaimana cara mengendalikan gulma secara mekanik?":
+        "Pengendalian mekanik dilakukan dengan mencabut manual, menggunakan alat bajak, atau mencangkul secara rutin untuk menghilangkan gulma.",
+    "apa itu pestisida selektif dan keuntungannya?":
+        "Pestisida selektif hanya membunuh hama tertentu tanpa merusak tanaman atau organisme lain, sehingga ramah lingkungan.",
+    "bagaimana pengaruh penggunaan pestisida terhadap kualitas tanah?":
+        "Penggunaan pestisida berlebihan dapat menurunkan aktivitas mikroba tanah dan mengganggu keseimbangan ekosistem tanah.",
+    "apa itu biopestisida dan contohnya?":
+        "Biopestisida adalah pestisida berbahan dasar mikroorganisme atau ekstrak alami, misal Bacillus thuringiensis untuk mengendalikan ulat.",
+    "bagaimana cara budidaya tanaman organik?":
+        "Budidaya organik menggunakan pupuk alami, pestisida nabati, rotasi tanaman, dan tidak menggunakan bahan kimia sintetis.",
+    "apa itu tanaman penarik hama (trap crop)?":
+        "Tanaman yang sengaja ditanam untuk menarik hama agar tidak menyerang tanaman utama, contohnya jagung untuk wereng padi.",
+    "bagaimana cara meningkatkan kualitas benih?":
+        "Pilih benih unggul, lakukan penyimpanan dengan benar, dan perlakukan benih dengan fungisida atau perangsang tumbuh.",
+    "apa itu sistem agroforestry?":
+        "Agroforestry menggabungkan tanaman perkebunan dengan pohon, meningkatkan keanekaragaman hayati dan konservasi tanah.",
+    "bagaimana cara menjaga kualitas air irigasi?":
+        "Jaga kebersihan sumber air, hindari pencemaran limbah, dan lakukan filtrasi bila perlu untuk menjaga kualitas air.",
+    "apa itu hara makro dan mikro?":
+        "Hara makro dibutuhkan tanaman dalam jumlah besar (N, P, K), sedangkan hara mikro dibutuhkan sedikit (Fe, Zn, Mn, Cu).",
+    "bagaimana cara memerangi resistensi hama terhadap pestisida?":
+        "Rotasi jenis pestisida, gunakan dosis tepat, dan kombinasikan dengan metode pengendalian hayati.",
+    "apa itu teknik penyemaian benih secara presisi?":
+        "Penyemaian dengan jarak dan kedalaman seragam untuk mempercepat pertumbuhan dan memudahkan perawatan.",
+    "bagaimana cara mengelola limbah pertanian?":
+        "Limbah bisa dijadikan kompos, biogas, atau bahan baku pupuk organik untuk mengurangi pencemaran.",
+    "apa manfaat mikroorganisme dekomposer di tanah?":
+        "Mikroorganisme ini membantu menguraikan bahan organik menjadi nutrisi yang mudah diserap tanaman.",
+    "bagaimana cara menggunakan teknologi drone dalam pertanian?":
+        "Drone dapat digunakan untuk pemantauan lahan, penyemprotan pestisida, dan pemetaan tanaman secara efisien.",
+    "apa itu tanaman penutup musim hujan dan manfaatnya?":
+        "Tanaman yang ditanam untuk menutupi tanah selama musim hujan guna mencegah erosi dan meningkatkan kesuburan.",
+    "bagaimana cara mengatasi serangan hama tanpa pestisida kimia?":
+        "Gunakan predator alami, tanaman pengusir hama, dan teknik kultur teknis seperti rotasi tanaman dan sanitasi lahan.",
+    "apa itu fertirigasi dan keunggulannya?":
+        "Pemberian pupuk melalui sistem irigasi, meningkatkan efisiensi penggunaan pupuk dan distribusi nutrisi.",
+    "bagaimana cara meningkatkan produktivitas tanah marginal?":
+        "Tambah bahan organik, gunakan pupuk hayati, rotasi tanaman, dan teknik konservasi tanah yang tepat.",
+    "apa pentingnya sertifikasi organik bagi produk pertanian?":
+        "Sertifikasi menjamin produk bebas bahan kimia sintetis, meningkatkan nilai jual dan kepercayaan konsumen.",
+        # 121️⃣ - 150️⃣
+    "apa manfaat penggunaan pupuk organik cair?":
+        "Pupuk organik cair mempercepat penyerapan nutrisi, meningkatkan kesuburan tanah, dan ramah lingkungan.",
+    "bagaimana cara mendeteksi serangan hama tikus di sawah?":
+        "Tanda serangan tikus meliputi lubang di sekitar tanaman, batang tanaman terpotong, dan jejak kaki di tanah basah.",
+    "apa itu pengendalian hayati hama?":
+        "Pengendalian hayati menggunakan musuh alami hama seperti predator, parasitoid, atau patogen untuk mengendalikan populasi hama.",
+    "bagaimana cara mengatasi serangan penyakit embun tepung pada tanaman?":
+        "Gunakan varietas tahan, semprot fungisida berbahan aktif sulfur, dan hindari kelembaban berlebih pada daun.",
+    "apa itu pupuk hijau dan fungsinya?":
+        "Pupuk hijau adalah tanaman yang ditanam untuk kemudian dibajak ke tanah sebagai sumber nitrogen dan bahan organik.",
+    "bagaimana pengaruh suhu terhadap pertumbuhan tanaman?":
+        "Suhu optimal mempercepat fotosintesis dan pertumbuhan, sedangkan suhu ekstrem dapat menghambat atau merusak tanaman.",
+    "apa itu sistem tanam jajar legowo?":
+        "Sistem tanam dengan pengaturan jarak tertentu agar tanaman mendapat cahaya dan udara cukup untuk hasil maksimal.",
+    "bagaimana cara mengatasi kekeringan pada tanaman jagung?":
+        "Lakukan penyiraman teratur, gunakan mulsa, dan pilih varietas tahan kekeringan.",
+    "apa itu erosi tanah dan bagaimana cara mencegahnya?":
+        "Erosi adalah hilangnya lapisan atas tanah oleh air atau angin; pencegahan dengan penanaman penutup, terasering, dan mulsa.",
+    "bagaimana cara membuat pupuk kompos dari limbah pertanian?":
+        "Kumpulkan limbah organik, susun berlapis dengan bahan hijau dan coklat, jaga kelembaban, dan aduk secara berkala sampai matang.",
+    "apa itu mikroba pelarut fosfat?":
+        "Mikroba yang membantu melarutkan fosfat tanah menjadi bentuk yang mudah diserap tanaman.",
+    "bagaimana cara mengendalikan hama wereng dengan metode non-kimia?":
+        "Gunakan predator alami seperti capung, tanaman pengusir hama, dan sanitasi lahan.",
+    "apa itu sistem pertanian konservasi?":
+        "Praktik pertanian yang menjaga kondisi tanah dan ekosistem dengan minim gangguan seperti tanpa olah tanah berat.",
+    "bagaimana cara memperbaiki tanah yang asam?":
+        "Tambahkan kapur (dolomit) untuk menaikkan pH tanah dan meningkatkan kesuburan.",
+    "apa peran cacing tanah dalam kesuburan tanah?":
+        "Cacing tanah membantu mengurai bahan organik dan memperbaiki struktur tanah sehingga akar mudah berkembang.",
+    "bagaimana cara memanen padi yang benar?":
+        "Panen saat biji berwarna kuning keemasan, gunakan alat tajam, dan keringkan gabah sebelum penyimpanan.",
+    "apa itu tanaman refugia dalam pengendalian hama?":
+        "Tanaman yang ditanam untuk menyediakan habitat bagi musuh alami hama agar tetap ada di lahan pertanian.",
+    "bagaimana cara mengatasi serangan penyakit layu pada tanaman?":
+        "Penggunaan varietas tahan, sanitasi lahan, dan rotasi tanaman bisa mengurangi serangan layu.",
+    "apa itu teknik budidaya hidroponik?":
+        "Budidaya tanaman tanpa media tanah menggunakan larutan nutrisi sebagai pengganti tanah.",
+    "bagaimana cara mengelola irigasi tetes untuk tanaman hortikultura?":
+        "Atur jadwal penyiraman berdasarkan kebutuhan tanaman, gunakan filter untuk mencegah penyumbatan, dan periksa sistem secara berkala.",
+    "apa itu tanaman penangkal angin dan manfaatnya?":
+        "Tanaman yang ditanam untuk mengurangi kecepatan angin, melindungi tanaman utama dari kerusakan fisik.",
+    "bagaimana cara mencegah kerusakan akibat embun beku pada tanaman sayur?":
+        "Gunakan penutup plastik, semprot air pada malam hari untuk membentuk lapisan pelindung, dan pilih waktu tanam yang tepat.",
+    "apa itu sistem pertanian organik terpadu?":
+        "Sistem yang menggabungkan budidaya tanaman, peternakan, dan pengelolaan sumber daya secara berkelanjutan.",
+    "bagaimana cara menentukan waktu panen yang tepat untuk sayuran?":
+        "Perhatikan ukuran, warna, dan tekstur sesuai varietas serta kondisi pasar.",
+    "apa itu sistem pertanian berkelanjutan?":
+        "Pertanian yang memenuhi kebutuhan saat ini tanpa mengorbankan kemampuan generasi mendatang dengan menjaga keseimbangan lingkungan.",
+    "bagaimana cara memanfaatkan limbah ternak sebagai pupuk?":
+        "Proses melalui fermentasi atau komposting untuk menghasilkan pupuk kandang yang kaya nutrisi.",
+    "apa itu biofertilizer dan keuntungannya?":
+        "Biofertilizer adalah pupuk berbasis mikroorganisme yang meningkatkan kesuburan tanah dan pertumbuhan tanaman secara alami.",
+    "bagaimana cara mengurangi emisi gas rumah kaca dari pertanian?":
+        "Optimalkan penggunaan pupuk, gunakan varietas tahan perubahan iklim, dan praktikkan pertanian konservasi.",
+    "apa itu tanaman penangkap karbon dan fungsinya?":
+        "Tanaman yang menyerap karbon dioksida dari atmosfer untuk mengurangi dampak perubahan iklim."
+
 }
 
 def is_relevant_question(question):
@@ -100,111 +340,11 @@ def is_relevant_question(question):
         "padi", "hama", "tanaman", "pupuk", "sawah", "cuaca", "iklim",
         "irigasi", "panen", "pertanian", "pestisida", "organik", "hujan"
     ])
-
-@app.route("/fertilizer", methods=["POST"])
-def fertilizer():
-    """Hitung kebutuhan pupuk berdasarkan luas lahan dan jenis tanaman"""
-    data = request.get_json()
-    crop = data.get("crop", "").strip().lower()
-    area = data.get("area", 0)  # Luas lahan dalam hektar
-
-    if not crop or area <= 0:
-        return jsonify({"response": "⚠️ Masukkan jenis tanaman dan luas lahan yang valid."})
-
-    # Database dosis pupuk per hektar (contoh)
-    DOSIS_PUPUK = {
-        "padi": {"urea": 250, "sp36": 100, "kcl": 75},  # kg/ha
-        "jagung": {"urea": 200, "sp36": 100, "kcl": 50},
-        "kedelai": {"urea": 50, "sp36": 50, "kcl": 50}
-    }
-
-    if crop in DOSIS_PUPUK:
-        kebutuhan = {k: v * area for k, v in DOSIS_PUPUK[crop].items()}
-        response_text = f"📊 Kebutuhan pupuk untuk {area} ha {crop}:\n"
-        response_text += "\n".join([f"🔹 {k.upper()}: {v} kg" for k, v in kebutuhan.items()])
-        return jsonify({"response": response_text})
-
-    return jsonify({"response": "⚠️ Maaf, data pupuk untuk tanaman ini belum tersedia."})
-
-@app.route("/fertilizer_v2", methods=["POST"])
-def fertilizer_v2():
-    """Hitung kebutuhan pupuk berdasarkan luas lahan, jenis pupuk, dan target panen dengan rentang dosis"""
-    data = request.get_json()
-    crop = data.get("crop", "").strip().lower()
-    area = data.get("area", 0)  # Luas lahan dalam hektar
-    target_yield = data.get("target_yield", 0)  # Target hasil panen dalam ton/ha
-
-    if not crop or area <= 0 or target_yield <= 0:
-        return jsonify({"response": "⚠️ Masukkan jenis tanaman, luas lahan, dan target panen yang valid."})
-
-    # Database dosis pupuk per ton target hasil panen (rentang min-max)
-    PUPUK_PER_TON = {
-        "padi": {"urea": (25, 30), "sp36": (10, 12), "kcl": (7, 9)},  # kg/ton per hektar
-        "jagung": {"urea": (20, 25), "sp36": (8, 10), "kcl": (5, 7)},
-        "kedelai": {"urea": (8, 10), "sp36": (6, 8), "kcl": (4, 5)}
-    }
-
-    if crop in PUPUK_PER_TON:
-        kebutuhan = {
-            k: (v[0] * target_yield * area, v[1] * target_yield * area) 
-            for k, v in PUPUK_PER_TON[crop].items()
-        }
-        response_text = (
-            f"📊 *Estimasi kebutuhan pupuk untuk {area} ha {crop} dengan target {target_yield} ton/ha:*\n"
-        )
-        response_text += "\n".join([f"🔹 {k.upper()}: {int(v[0])}-{int(v[1])} kg" for k, v in kebutuhan.items()])
-        response_text += (
-            "\n\n⚠️ *Catatan:* Dosis ini dapat bervariasi tergantung kondisi tanah, cuaca, dan varietas tanaman. "
-            "Sebaiknya lakukan uji tanah atau konsultasi dengan penyuluh pertanian setempat.\n"
-            "Semoga membantu! Jika ada pertanyaan lain, silakan tanyakan. 😊"
-        )
-        return jsonify({"response": response_text})
-
-    return jsonify({"response": "⚠️ Maaf, data pupuk untuk tanaman ini belum tersedia."})
-
-@app.route("/fertilizer_plan", methods=["POST"])
-def fertilizer_plan():
-    """Menghitung kebutuhan pupuk berdasarkan luas lahan & target hasil panen"""
-    data = request.get_json()
-    area = float(data.get("area", 0))  # Luas lahan dalam hektar
-    target_yield = float(data.get("target_yield", 0))  # Target hasil panen dalam ton/ha
-
-    if area <= 0 or target_yield <= 0:
-        return jsonify({"response": "⚠️ Masukkan luas lahan dan target panen yang valid."})
-
-    # Rekomendasi pupuk per hektar
-    FERTILIZER_RECOMMENDATION = {
-        "urea": {"min": 120, "max": 150},  # kg/ha
-        "tsp": {"min": 60, "max": 80},  # kg/ha
-        "kcl": {"min": 90, "max": 120}  # kg/ha
-    }
-
-    # Menghitung total pupuk yang dibutuhkan
-    kebutuhan_pupuk = {
-        pupuk: {"min": v["min"] * area, "max": v["max"] * area}
-        for pupuk, v in FERTILIZER_RECOMMENDATION.items()
-    }
-
-    response_text = (
-        f"📊 *Estimasi kebutuhan pupuk untuk {area} ha padi dengan target {target_yield} ton/ha:*\n"
-    )
-    response_text += "\n".join(
-        [f"🔹 {pupuk.upper()}: {value['min']}-{value['max']} kg" for pupuk, value in kebutuhan_pupuk.items()]
-    )
-
-    response_text += (
-        "\n\n🗓️ *Jadwal Pemupukan:*\n"
-        "✅ **Pupuk Dasar (sebelum tanam):** 50% TSP + 30% Urea + 40% KCl\n"
-        "✅ **Pupuk Susulan 1 (21 HST):** 40% Urea + 40% KCl\n"
-        "✅ **Pupuk Susulan 2 (45 HST):** Sisa Urea\n\n"
-        "🌿 *Alternatif Pupuk Organik:*\n"
-        "- **Pupuk Kandang:** 2-3 ton/ha\n"
-        "- **Kompos Jerami:** 4-5 ton/ha\n"
-        "- **Biofertilizer:** Tambahkan mikroba tanah untuk meningkatkan efisiensi pupuk\n\n"
-        "💡 *Tips:* Lakukan uji tanah untuk hasil lebih akurat!"
-    )
-
-    return jsonify({"response": response_text})
+def fuzzy_match(user_message, threshold=0.6):
+    matches = difflib.get_close_matches(user_message, SISTEM_PAKAR.keys(), n=1, cutoff=threshold)
+    if matches:
+        return matches[0]
+    return None
 
 def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
     rekomendasi = []
@@ -260,10 +400,18 @@ def chat():
         else:
             return jsonify({"response": "⚠️ Tidak ada jawaban sebelumnya untuk diringkas."})
 
-    # ✅ Cek apakah pertanyaan ada di sistem pakar
+    # ✅ Cek apakah pertanyaan ada di sistem pakar (Exact Match / Fuzzy Match)
     if user_message in SISTEM_PAKAR:
         last_response = SISTEM_PAKAR[user_message]
         return jsonify({"response": last_response})
+
+    matched_key = fuzzy_match(user_message)
+    if matched_key:
+        last_response = SISTEM_PAKAR[matched_key]
+        return jsonify({
+            "response": f"\n\n{last_response}"
+        })
+
 
     # ✅ Cek apakah pertanyaan relevan dengan pertanian/cuaca
     if not is_relevant_question(user_message):

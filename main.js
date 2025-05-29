@@ -16,70 +16,114 @@ let isFirstSend = true;
 let currentHistoryIdx = null;
 
 // --- Sidebar History Logic ---
-function loadHistorySidebar() {
-  const history = JSON.parse(localStorage.getItem('chatSidebarHistory') || '[]');
+async function loadHistorySidebar() {
   historyUl.innerHTML = "";
-  history.forEach((h, idx) => {
+
+  // Ambil list sesi dari database lewat API
+  const res = await fetch("chat_api.php?action=get_sessions");
+  const sessions = await res.json();
+
+  sessions.forEach((session) => {
     const li = document.createElement("li");
     li.className = "history-item";
     li.innerHTML = `
-      <span class="history-title">${h.title}</span>
+      <span class="history-title">${session.session_name}</span>
       <span class="ellipsis" title="Hapus">&#8230;</span>
     `;
-    li.querySelector('.ellipsis').onclick = (e) => {
+
+    li.querySelector('.ellipsis').onclick = async (e) => {
       e.stopPropagation();
       if (confirm("Hapus chat ini?")) {
-        deleteSidebarHistory(idx);
+        await fetch("chat_api.php?action=delete_session", {
+          method: "POST",
+          body: new URLSearchParams({ session_id: session.id })
+        });
+        loadHistorySidebar();
+        if (currentHistoryIdx === session.id) newChat();
       }
     };
-    li.onclick = (e) => {
-      if (e.target.classList.contains('ellipsis')) return;
-      loadChatFromHistory(idx);
-    };
+
+    li.onclick = () => loadChatFromHistory(session.id);
+
     historyUl.appendChild(li);
   });
 }
 
-function saveToSidebarHistory(title, chatLog) {
-  let history = JSON.parse(localStorage.getItem('chatSidebarHistory') || '[]');
-  history.unshift({ title, chat: chatLog });
-  localStorage.setItem('chatSidebarHistory', JSON.stringify(history));
-  loadHistorySidebar();
-  currentHistoryIdx = 0;
-  localStorage.setItem('currentHistoryIdx', 0);
-}
 
-function updateLastSidebarHistory(chatLog) {
-  let history = JSON.parse(localStorage.getItem('chatSidebarHistory') || '[]');
-  if (history.length > 0 && currentHistoryIdx !== null) {
-    history[currentHistoryIdx].chat = chatLog;
-    localStorage.setItem('chatSidebarHistory', JSON.stringify(history));
+async function saveToSidebarHistory(title, chatLog) {
+  // Buat session baru di database
+  const res = await fetch("chat_api.php?action=new_session", {
+    method: "POST",
+    body: new URLSearchParams({ session_name: title })
+  });
+  const data = await res.json();
+
+  if (data.session_id) {
+    currentHistoryIdx = data.session_id;
+
+    // Simpan chat ke DB per pesan
+    for (const msg of chatLog) {
+      await fetch("chat_api.php?action=save_message", {
+        method: "POST",
+        body: new URLSearchParams({
+          session_id: data.session_id,
+          sender: msg.sender,
+          message: msg.text
+        })
+      });
+    }
+
+    loadHistorySidebar();
   }
 }
 
-function deleteSidebarHistory(idx) {
-  let history = JSON.parse(localStorage.getItem('chatSidebarHistory') || '[]');
-  history.splice(idx, 1);
-  localStorage.setItem('chatSidebarHistory', JSON.stringify(history));
-  loadHistorySidebar();
-  if (currentHistoryIdx === idx) newChat();
-}
 
-function loadChatFromHistory(idx) {
-  const history = JSON.parse(localStorage.getItem('chatSidebarHistory') || '[]');
-  if (history[idx]) {
-    chatbox.innerHTML = "";
-    chatbox.style.display = "flex";
-    mainTitle.style.display = "none";
-    currentChat = [...history[idx].chat];
-    currentHistoryIdx = idx;
-    localStorage.setItem('currentHistoryIdx', idx);
-    currentChat.forEach(item => {
-      appendMessage(item.sender, item.text);
+async function updateLastSidebarHistory(chatLog) {
+  if (currentHistoryIdx === null) return;
+  
+  // Hapus dulu chat lama di session ini
+  await fetch("chat_api.php?action=clear_messages", {
+    method: "POST",
+    body: new URLSearchParams({ session_id: currentHistoryIdx })
+  });
+
+  // Simpan ulang semua chat
+  for (const msg of chatLog) {
+    await fetch("chat_api.php?action=save_message", {
+      method: "POST",
+      body: new URLSearchParams({
+        session_id: currentHistoryIdx,
+        sender: msg.sender,
+        message: msg.text
+      })
     });
-    isFirstSend = false;
   }
 }
+
+
+function clearChatbox() {
+  chatbox.innerHTML = "";
+}
+
+
+async function loadChatFromHistory(sessionId) {
+  chatbox.innerHTML = "";
+  chatbox.style.display = "flex";
+  mainTitle.style.display = "none";
+
+  const res = await fetch(`chat_api.php?action=get_messages&session_id=${sessionId}`);
+  const messages = await res.json();
+
+  currentChat = messages.map(msg => ({ sender: msg.sender, text: msg.message }));
+  currentHistoryIdx = sessionId;
+
+  currentChat.forEach(item => {
+    appendMessage(item.sender, item.text);
+  });
+
+  isFirstSend = false;
+}
+
 
 // --- Chat Logic ---
 function appendMessage(sender, message) {
@@ -167,16 +211,16 @@ async function sendMessage() {
 
 // --- New Chat Logic ---
 function newChat() {
-  if (currentChat.length > 0) updateLastSidebarHistory([...currentChat]);
-  chatbox.innerHTML = "";
+  if (currentChat.length > 0) updateLastSidebarHistory(currentChat);
+  clearChatbox();
   chatbox.style.display = "none";
   mainTitle.style.display = "";
   userInput.value = "";
   currentChat = [];
   isFirstSend = true;
   currentHistoryIdx = null;
-  localStorage.removeItem('currentHistoryIdx');
 }
+
 
 // --- Weather Logic ---
 weatherBtn.onclick = async function() {

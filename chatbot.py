@@ -3,8 +3,9 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-import spacy
+import difflib
 
+# Load environment variables
 load_dotenv()
 
 # API Keys
@@ -12,27 +13,18 @@ TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 if not TOGETHER_API_KEY:
-    raise ValueError("API Key Together AI tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
+    raise ValueError("⚠️ API Key Together AI tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
 if not OPENWEATHER_API_KEY:
-    raise ValueError("API Key OpenWeather tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
+    raise ValueError("⚠️ API Key OpenWeather tidak ditemukan! Pastikan sudah diset di environment variables atau file .env.")
 
 # Inisialisasi Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-# Inisialisasi model NLP
-# Pastikan model ini sudah diunduh dengan: python -m spacy download xx_ent_wiki_sm
-try:
-    nlp = spacy.load("xx_ent_wiki_sm")
-except OSError:
-    print("Model 'xx_ent_wiki_sm' tidak ditemukan. Harap unduh dengan: python -m spacy download xx_ent_wiki_sm")
-    # Alternatif: gunakan model yang lebih kecil atau berikan pesan error yang jelas
-    nlp = None # Atau keluar dari aplikasi jika spaCy sangat krusial
+CORS(app)
 
 @app.route("/")
 def home():
     return jsonify({
-        "message": "Selamat datang di Chatbot AI Pertanian (Powered by Together AI)!",
+        "message": "✅ Selamat datang di Chatbot AI Pertanian (Powered by Together AI)!",
         "endpoints": {
             "/chat": "Gunakan metode POST untuk bertanya ke chatbot.",
             "/weather": "Gunakan metode POST untuk mendapatkan informasi cuaca.",
@@ -40,8 +32,7 @@ def home():
         }
     })
 
-
-# === SISTEM PAKAR: Aturan IF-THEN ===
+# === ✅ SISTEM PAKAR: Aturan IF-THEN ===
 SISTEM_PAKAR = {
     # Penyakit dan Hama Tanaman
     "tanaman padi saya terkena bercak coklat, apa penyebabnya?":
@@ -340,17 +331,7 @@ SISTEM_PAKAR = {
         "Optimalkan penggunaan pupuk, gunakan varietas tahan perubahan iklim, dan praktikkan pertanian konservasi.",
     "apa itu tanaman penangkap karbon dan fungsinya?":
         "Tanaman yang menyerap karbon dioksida dari atmosfer untuk mengurangi dampak perubahan iklim."
-
 }
-
-def nlp_extract_entities(text):
-    doc = nlp(text)
-    entities = [(ent.label_, ent.text) for ent in doc.ents]
-    lemmas = [token.lemma_ for token in doc if token.pos_ in ["VERB", "NOUN"]]
-    return {
-        "entities": entities,
-        "lemmas": lemmas
-    }
 
 def is_relevant_question(question):
     """Memeriksa apakah pertanyaan berhubungan dengan pertanian atau cuaca"""
@@ -360,119 +341,22 @@ def is_relevant_question(question):
         "irigasi", "panen", "pertanian", "pestisida", "organik", "hujan"
     ])
 
-def fuzzy_match_spacy(user_message, threshold=0.85):
-    """Fuzzy match pakai similarity spaCy NLP"""
-    if nlp is None: # Pastikan nlp sudah terinisialisasi
-        return None
-    user_doc = nlp(user_message)
-    best_score = 0
-    best_key = None
-    for key in SISTEM_PAKAR:
-        key_doc = nlp(key)
-        score = user_doc.similarity(key_doc)
-        if score > best_score:
-            best_score = score
-            best_key = key
-    if best_score >= threshold:
-        return best_key
-    return None
+def fuzzy_match(user_message, threshold=0.6):
+    """Melakukan pencocokan fuzzy terhadap pertanyaan sistem pakar"""
+    matches = difflib.get_close_matches(user_message, SISTEM_PAKAR.keys(), n=1, cutoff=threshold)
+    return matches[0] if matches else None
 
 def summarize_answer(answer):
-    "Fungsi untuk meringkas jawaban panjang menjadi versi pendek."
+    """Meringkas jawaban menjadi 3 baris pertama"""
     lines = answer.split('\n')
     return '\n'.join(lines[:3]) + "..." if len(lines) > 3 else answer
 
-def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
-    rekomendasi = []
-
-    if musim == "hujan":
-        rekomendasi.extend(["Padi", "Jagung", "Kacang Tanah"])
-    if musim == "kemarau":
-        rekomendasi.extend(["Jagung", "Kedelai", "Ubi Kayu"])
-    if suhu and suhu < 20:
-        rekomendasi.extend(["Kentang", "Wortel", "Kubis"])
-    if curah_hujan and curah_hujan > 200:
-        rekomendasi = [t for t in rekomendasi if t not in ["Cabai", "Bawang Merah"]]
-
-    return rekomendasi if rekomendasi else ["Tidak ada rekomendasi spesifik"]
-
-# Contoh penggunaan:
-# print(rekomendasi_tanaman(musim="kemarau", suhu=25, curah_hujan=100))
-# Output: ['Jagung', 'Kedelai', 'Ubi Kayu']
-
-@app.route("/recommend_crop", methods=["POST"])
-def recommend_crop():
-    """Memberikan rekomendasi tanaman berdasarkan musim, suhu, dan curah hujan"""
-    data = request.get_json()
-    musim = data.get("musim", "").strip().lower()
-    suhu = float(data.get("suhu", 0))
-    curah_hujan = float(data.get("curah_hujan", 0))
-
-    if not musim or suhu <= 0 or curah_hujan <= 0:
-        return jsonify({"response": "Masukkan data musim, suhu, dan curah hujan yang valid."})
-
-    rekomendasi = rekomendasi_tanaman(musim=musim, suhu=suhu, curah_hujan=curah_hujan)
-    return jsonify({
-        "response": f"Rekomendasi tanaman untuk kondisi tersebut: {', '.join(rekomendasi)}"
-    })
-
-
-last_response = ""  # Simpan jawaban untuk bisa diringkas
-
-@app.route("/chat", methods=["POST"])
-def chat():
-    global last_response
-    data = request.get_json()
-    user_message = data.get("message", "").strip().lower()
-
-    if not user_message:
-        return jsonify({"response": "Ketik untuk bertanya."})
-
-    # Jika pengguna ingin merangkum jawaban sebelumnya
-    if "ringkas jawabannya" in user_message or "persingkat jawabannya" in user_message:
-        if last_response:
-            summarized_response = summarize_answer(last_response)
-            return jsonify({"response": summarized_response})
-        else:
-            return jsonify({"response": "Tidak ada jawaban sebelumnya untuk diringkas."})
-
-    # Inisialisasi bot_response di awal, ini yang menyebabkan UnboundLocalError sebelumnya
-    bot_response = None
-
-    # Cek apakah pertanyaan ada di sistem pakar (Exact Match)
-    if user_message in SISTEM_PAKAR:
-        bot_response = SISTEM_PAKAR[user_message]
-    else:
-        # Cek Fuzzy Match di SISTEM_PAKAR
-        matched_key = fuzzy_match_spacy(user_message)
-        if matched_key:
-            bot_response = SISTEM_PAKAR[matched_key]
-
-    # Jika sistem pakar tidak ada match, coba ke AI (Together AI)
-    if bot_response is None: # Baris ini sekarang aman karena bot_response selalu terinisialisasi
-        if not is_relevant_question(user_message):
-            bot_response = "Maaf, saya hanya menjawab pertanyaan tentang pertanian dan cuaca."
-        else:
-            try:
-                # Pastikan get_answer_from_ai mengembalikan string
-                bot_response = get_answer_from_ai(user_message)
-                if not isinstance(bot_response, str) or not bot_response.strip():
-                    bot_response = "Maaf, AI tidak dapat memberikan jawaban untuk saat ini."
-            except Exception as e:
-                print(f"Error saat memanggil Together AI atau memproses AI response: {e}")
-                bot_response = "Maaf, ada masalah teknis saat memproses permintaan AI. Coba lagi nanti."
-
-    last_response = bot_response if bot_response is not None else "Maaf, saya tidak bisa menemukan jawaban."
-    return jsonify({"response": last_response})
-
-
 def get_answer_from_ai(user_message):
-    "Fungsi untuk mendapatkan jawaban dari Together AI."
+    """Menghubungi Together AI untuk jawaban pertanian/cuaca"""
     headers = {
         "Authorization": f"Bearer {TOGETHER_API_KEY}",
         "Content-Type": "application/json"
     }
-
     payload = {
         "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
         "messages": [
@@ -490,23 +374,86 @@ def get_answer_from_ai(user_message):
         if response.status_code == 200 and "choices" in response_json:
             return response_json["choices"][0].get("message", {}).get("content", "").strip()
         else:
-            # Lebih detail error handling dari Together AI
-            error_message = response_json.get("error", {}).get("message", "Unknown error from Together AI")
-            return f"Tidak bisa mengambil jawaban dari AI: {error_message}. Status: {response.status_code}"
+            return "⚠️ Tidak bisa mengambil jawaban dari AI. Periksa koneksi atau coba lagi nanti."
     except Exception as e:
-        return f"Terjadi kesalahan saat menghubungkan AI: {str(e)}"
+        return f"⚠️ Terjadi kesalahan saat menghubungi AI: {str(e)}"
 
+# Global variabel untuk menyimpan jawaban terakhir
+last_response = ""
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    global last_response
+    data = request.get_json()
+    user_message = data.get("message", "").strip().lower()
+
+    if not user_message:
+        return jsonify({"response": "⚠️ Mohon ketik sesuatu untuk bertanya."})
+
+    # Permintaan ringkasan
+    if "ringkas jawabannya" in user_message or "persingkat jawabannya" in user_message:
+        if last_response:
+            return jsonify({"response": summarize_answer(last_response)})
+        return jsonify({"response": "⚠️ Tidak ada jawaban sebelumnya untuk diringkas."})
+
+    # Sistem pakar: exact match
+    if user_message in SISTEM_PAKAR:
+        last_response = SISTEM_PAKAR[user_message]
+        return jsonify({"response": last_response})
+
+    # Sistem pakar: fuzzy match
+    matched_key = fuzzy_match(user_message)
+    if matched_key:
+        last_response = SISTEM_PAKAR[matched_key]
+        return jsonify({"response": last_response})
+
+    # Pertanyaan tidak relevan
+    if not is_relevant_question(user_message):
+        return jsonify({"response": "⚠️ Maaf, saya hanya menjawab pertanyaan tentang pertanian dan cuaca."})
+
+    # Gunakan AI untuk menjawab
+    response = get_answer_from_ai(user_message)
+    last_response = response
+    return jsonify({"response": response})
+
+def rekomendasi_tanaman(musim=None, suhu=None, curah_hujan=None):
+    rekomendasi = []
+
+    if musim == "hujan":
+        rekomendasi.extend(["Padi", "Jagung", "Kacang Tanah"])
+    if musim == "kemarau":
+        rekomendasi.extend(["Jagung", "Kedelai", "Ubi Kayu"])
+    if suhu and suhu < 20:
+        rekomendasi.extend(["Kentang", "Wortel", "Kubis"])
+    if curah_hujan and curah_hujan > 200:
+        rekomendasi = [t for t in rekomendasi if t not in ["Cabai", "Bawang Merah"]]
+
+    return rekomendasi if rekomendasi else ["Tidak ada rekomendasi spesifik"]
+
+@app.route("/recommend_crop", methods=["POST"])
+def recommend_crop():
+    data = request.get_json()
+    musim = data.get("musim", "").strip().lower()
+    suhu = float(data.get("suhu", 0))
+    curah_hujan = float(data.get("curah_hujan", 0))
+
+    if not musim or suhu <= 0 or curah_hujan <= 0:
+        return jsonify({"response": "⚠️ Masukkan data musim, suhu, dan curah hujan yang valid."})
+
+    rekomendasi = rekomendasi_tanaman(musim=musim, suhu=suhu, curah_hujan=curah_hujan)
+    return jsonify({
+        "response": f"🌱 Rekomendasi tanaman untuk kondisi tersebut: {', '.join(rekomendasi)}"
+    })
 
 @app.route("/weather", methods=["POST"])
 def get_weather():
-    """Endpoint untuk mendapatkan informasi cuaca dari OpenWeather"""
     data = request.get_json()
     city = data.get("city", "").strip()
 
     if not city:
-        return jsonify({"response": "Masukkan nama kota untuk mendapatkan informasi cuaca."})
+        return jsonify({"response": "⚠️ Mohon masukkan nama kota untuk mendapatkan informasi cuaca."})
     if not city.isalpha():
-        return jsonify({"response": "Nama kota harus berupa huruf tanpa angka atau simbol."})
+        return jsonify({"response": "⚠️ Nama kota harus berupa huruf tanpa angka atau simbol."})
 
     url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={OPENWEATHER_API_KEY}&units=metric&lang=id"
 
@@ -520,24 +467,23 @@ def get_weather():
             description = weather_info.get("description", "Tidak tersedia").capitalize()
             temperature = weather_data.get("main", {}).get("temp", "Tidak tersedia")
             humidity = weather_data.get("main", {}).get("humidity", "Tidak tersedia")
-            wind_speed = weather_data.get("wind", {}).get("wind", {}).get("speed", "Tidak tersedia") # Fixed: Use wind_speed instead of wind
+            wind_speed = weather_data.get("wind", {}).get("speed", "Tidak tersedia")
 
             weather_report = (
-                f"Cuaca di {city_name}\n"
-                f"Kondisi: {description}\n"
-                f"Suhu: {temperature}°C\n"
-                f"Kelembapan: {humidity}%\n"
-                f"Kecepatan Angin: {wind_speed} m/s\n"
-                f"\n Semoga informasi ini bermanfaat! "
+                f"📍 *Cuaca di {city_name}:*\n"
+                f"🌦️ *Kondisi:* {description}\n"
+                f"🌡️ *Suhu:* {temperature}°C\n"
+                f"💧 *Kelembapan:* {humidity}%\n"
+                f"🌬️ *Kecepatan Angin:* {wind_speed} m/s\n"
+                f"\n🔹 *Semoga informasi ini bermanfaat!* 😊"
             )
-            return jsonify({"response": weather_report}) # <--- INI SUDAH DIHAPUS KOMENTARNYA
         else:
-            weather_report = "Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
-
+            weather_report = "⚠️ Kota tidak ditemukan. Mohon cek kembali nama kota Anda."
     except Exception as e:
-        weather_report = f" Maaf, terjadi kesalahan saat mengambil data cuaca: {str(e)}"
+        weather_report = f"⚠️ Terjadi kesalahan saat mengambil data cuaca: {str(e)}"
 
-    return jsonify({"response": weather_report}) # Ini akan dijalankan jika ada error di try/except
+    return jsonify({"response": weather_report})
 
+# Jalankan aplikasi
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

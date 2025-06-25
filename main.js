@@ -19,51 +19,61 @@ let currentHistoryIdx = null;
 async function loadHistorySidebar() {
   historyUl.innerHTML = "";
 
-  // Ambil list sesi dari database lewat API
-  const res = await fetch("chat_api.php?action=get_sessions");
-  const sessions = await res.json();
+  try {
+    const res = await fetch("chat_api.php?action=get_sessions");
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    const sessions = await res.json();
 
-  sessions.forEach((session) => {
-    const li = document.createElement("li");
-    li.className = "history-item";
-    li.innerHTML = `
-      <span class="history-title">${session.session_name}</span>
-      <span class="ellipsis" title="Hapus">&#8230;</span>
-    `;
+    sessions.forEach((session) => {
+      const li = document.createElement("li");
+      li.className = "history-item";
+      li.innerHTML = `
+        <span class="history-title">${session.session_name}</span>
+        <span class="ellipsis" title="Hapus">…</span>
+      `;
 
-    li.querySelector('.ellipsis').onclick = async (e) => {
-      e.stopPropagation();
-      if (confirm("Hapus chat ini?")) {
-        await fetch("chat_api.php?action=delete_session", {
-          method: "POST",
-          body: new URLSearchParams({ session_id: session.id })
-        });
-        loadHistorySidebar();
-        if (currentHistoryIdx === session.id) newChat();
-      }
-    };
+      li.querySelector('.ellipsis').onclick = async (e) => {
+        e.stopPropagation();
+        if (confirm("Hapus chat ini?")) {
+          try {
+            const deleteRes = await fetch("chat_api.php?action=delete_session", {
+              method: "POST",
+              body: new URLSearchParams({ session_id: session.id })
+            });
+            if (!deleteRes.ok) throw new Error(`HTTP error! Status: ${deleteRes.status}`);
+            await loadHistorySidebar();
+            if (currentHistoryIdx === session.id) newChat();
+          } catch (error) {
+            console.error("Gagal menghapus sesi:", error);
+          }
+        }
+      };
 
-    li.onclick = () => loadChatFromHistory(session.id);
-
-    historyUl.appendChild(li);
-  });
+      li.onclick = () => loadChatFromHistory(session.id);
+      historyUl.appendChild(li);
+    });
+  } catch (error) {
+    console.error("Gagal memuat history sidebar:", error);
+  }
 }
 
-
 async function saveToSidebarHistory(title, chatLog) {
-  // Buat session baru di database
-  const res = await fetch("chat_api.php?action=new_session", {
-    method: "POST",
-    body: new URLSearchParams({ session_name: title })
-  });
-  const data = await res.json();
+  try {
+    const res = await fetch("chat_api.php?action=new_session", {
+      method: "POST",
+      body: new URLSearchParams({ session_name: title })
+    });
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    const data = await res.json();
 
-  if (data.session_id) {
+    if (!data.success || !data.session_id) {
+      throw new Error(data.error || "Gagal membuat sesi baru");
+    }
+
     currentHistoryIdx = data.session_id;
-
-    // Simpan chat ke DB per pesan
+    localStorage.setItem('currentHistoryIdx', currentHistoryIdx); // Simpan ke localStorage
     for (const msg of chatLog) {
-      await fetch("chat_api.php?action=save_message", {
+      const saveRes = await fetch("chat_api.php?action=save_message", {
         method: "POST",
         body: new URLSearchParams({
           session_id: data.session_id,
@@ -71,59 +81,83 @@ async function saveToSidebarHistory(title, chatLog) {
           message: msg.text
         })
       });
+      if (!saveRes.ok) throw new Error(`HTTP error! Status: ${saveRes.status}`);
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        throw new Error(saveData.error || "Gagal menyimpan pesan");
+      }
     }
 
-    loadHistorySidebar();
+    await loadHistorySidebar();
+  } catch (error) {
+    console.error("Error saat menyimpan ke history:", error);
   }
 }
-
 
 async function updateLastSidebarHistory(chatLog) {
-  if (currentHistoryIdx === null) return;
-  
-  // Hapus dulu chat lama di session ini
-  await fetch("chat_api.php?action=clear_messages", {
-    method: "POST",
-    body: new URLSearchParams({ session_id: currentHistoryIdx })
-  });
+  if (currentHistoryIdx === null) {
+    console.warn("currentHistoryIdx null, tidak dapat memperbarui history.");
+    return;
+  }
 
-  // Simpan ulang semua chat
-  for (const msg of chatLog) {
-    await fetch("chat_api.php?action=save_message", {
+  try {
+    const clearRes = await fetch("chat_api.php?action=clear_messages", {
       method: "POST",
-      body: new URLSearchParams({
-        session_id: currentHistoryIdx,
-        sender: msg.sender,
-        message: msg.text
-      })
+      body: new URLSearchParams({ session_id: currentHistoryIdx })
     });
+    if (!clearRes.ok) throw new Error(`HTTP error! Status: ${clearRes.status}`);
+    const clearData = await clearRes.json();
+    if (!clearData.success) {
+      throw new Error(clearData.error || "Gagal menghapus pesan lama");
+    }
+
+    for (const msg of chatLog) {
+      const saveRes = await fetch("chat_api.php?action=save_message", {
+        method: "POST",
+        body: new URLSearchParams({
+          session_id: currentHistoryIdx,
+          sender: msg.sender,
+          message: msg.text
+        })
+      });
+      if (!saveRes.ok) throw new Error(`HTTP error! Status: ${saveRes.status}`);
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        throw new Error(saveData.error || "Gagal menyimpan pesan");
+      }
+    }
+  } catch (error) {
+    console.error("Error saat memperbarui history:", error);
   }
 }
-
 
 function clearChatbox() {
   chatbox.innerHTML = "";
 }
 
-
 async function loadChatFromHistory(sessionId) {
-  chatbox.innerHTML = "";
-  chatbox.style.display = "flex";
-  mainTitle.style.display = "none";
+  try {
+    chatbox.innerHTML = "";
+    chatbox.style.display = "flex";
+    mainTitle.style.display = "none";
 
-  const res = await fetch(`chat_api.php?action=get_messages&session_id=${sessionId}`);
-  const messages = await res.json();
+    const res = await fetch(`chat_api.php?action=get_messages&session_id=${sessionId}`);
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+    const messages = await res.json();
 
-  currentChat = messages.map(msg => ({ sender: msg.sender, text: msg.message }));
-  currentHistoryIdx = sessionId;
+    currentChat = messages.map(msg => ({ sender: msg.sender, text: msg.message }));
+    currentHistoryIdx = sessionId;
+    localStorage.setItem('currentHistoryIdx', currentHistoryIdx); // Simpan ke localStorage
 
-  currentChat.forEach(item => {
-    appendMessage(item.sender, item.text);
-  });
+    currentChat.forEach(item => {
+      appendMessage(item.sender, item.text);
+    });
 
-  isFirstSend = false;
+    isFirstSend = false;
+  } catch (error) {
+    console.error("Gagal memuat chat dari history:", error);
+  }
 }
-
 
 // --- Chat Logic ---
 function appendMessage(sender, message) {
@@ -160,6 +194,10 @@ async function sendMessage() {
   if (!q) return;
   userInput.value = "";
 
+  console.log("isFirstSend sebelum pengiriman:", isFirstSend);
+  console.log("currentChat sebelum pengiriman:", currentChat);
+  console.log("currentHistoryIdx sebelum pengiriman:", currentHistoryIdx);
+
   if (isFirstSend) {
     chatbox.innerHTML = "";
     chatbox.style.display = "flex";
@@ -177,6 +215,7 @@ async function sendMessage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: q }),
     });
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
     const data = await response.json();
     console.log("Data diterima dari Flask:", data);
     console.log("Isi data.response:", data.response);
@@ -189,22 +228,23 @@ async function sendMessage() {
 
     if (isFirstSend) {
       const title = q.split(" ").slice(0, 10).join(" ") + (q.split(" ").length > 10 ? "..." : "");
-      saveToSidebarHistory(title, [...currentChat]);
+      await saveToSidebarHistory(title, [...currentChat]);
       isFirstSend = false;
     } else {
-      updateLastSidebarHistory([...currentChat]);
+      await updateLastSidebarHistory([...currentChat]);
     }
-  } catch {
+  } catch (error) {
+    console.error("Gagal mengirim pesan:", error);
     const typingBubble = [...chatbox.querySelectorAll('.chat-msg.bot .chat-bubble')]
       .reverse().find(b => b.innerText === "Mengetik...");
     if (typingBubble) typingBubble.parentElement.remove();
     appendMessage("bot", "Gagal koneksi server.");
     if (isFirstSend) {
       const title = q.split(" ").slice(0, 10).join(" ") + (q.split(" ").length > 10 ? "..." : "");
-      saveToSidebarHistory(title, [...currentChat]);
+      await saveToSidebarHistory(title, [...currentChat]);
       isFirstSend = false;
     } else {
-      updateLastSidebarHistory([...currentChat]);
+      await updateLastSidebarHistory([...currentChat]);
     }
   }
 }
@@ -219,8 +259,8 @@ function newChat() {
   currentChat = [];
   isFirstSend = true;
   currentHistoryIdx = null;
+  localStorage.removeItem('currentHistoryIdx');
 }
-
 
 // --- Weather Logic ---
 weatherBtn.onclick = async function() {
@@ -233,10 +273,12 @@ weatherBtn.onclick = async function() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ city }),
     });
+    if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
     const data = await res.json();
     showWeatherAlert(data.response);
     // TIDAK masuk history!
-  } catch {
+  } catch (error) {
+    console.error("Gagal mengambil data cuaca:", error);
     showWeatherAlert("Gagal mengambil data cuaca.");
   }
 };
@@ -251,9 +293,9 @@ newChatBtn.onclick = newChat;
 // --- INIT ---
 document.addEventListener("DOMContentLoaded", () => {
   loadHistorySidebar();
-  const idx = localStorage.getItem('currentHistoryIdx');
-  if (idx !== null && !isNaN(idx)) {
-    loadChatFromHistory(Number(idx));
+  const savedSessionId = localStorage.getItem('currentHistoryIdx');
+  if (savedSessionId && !isNaN(savedSessionId)) {
+    loadChatFromHistory(Number(savedSessionId));
   } else {
     newChat();
   }
@@ -263,12 +305,13 @@ function openSidebar() {
   sidebar.classList.add('active');
   sidebarOverlay.classList.add('active');
 }
+
 function closeSidebar() {
   sidebar.classList.remove('active');
   sidebarOverlay.classList.remove('active');
 }
 
-//mobile sidebar
+// Mobile sidebar
 mobileSidebarBtn.onclick = openSidebar;
 sidebarLogoBtn.onclick = closeSidebar;
 sidebarOverlay.onclick = closeSidebar;
